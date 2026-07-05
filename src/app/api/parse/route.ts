@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
       const rows = await readPdf(buffer);
       sheets = { "Sheet1": rows };
     } else {
-      sheets = readExcel(buffer);
+      sheets = await readExcel(buffer);
     }
 
     // 根据 Sheet 模式选择 Sheet

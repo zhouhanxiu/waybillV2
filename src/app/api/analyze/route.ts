@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       previewText = generatePreviewText(rows, 30);
     } else {
       fileType = "excel";
-      const rows = readExcelSheet(buffer, 0);
+      const rows = await readExcelSheet(buffer, 0);
       previewText = generatePreviewText(rows, 30);
     }
 

@@ -1,14 +1,19 @@
-import { generateObject } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 import { ParseRule } from "./types";
 
-const deepseek = createOpenAI({
-  apiKey: process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY,
-  baseURL: process.env.AI_BASE_URL || "https://api.deepseek.com/v1",
-});
-
-const modelName = process.env.AI_MODEL || "deepseek-chat";
+// 动态导入大型 SDK 包，避免拖慢 Vercel 构建
+async function getAI() {
+  const [{ generateObject }, { createOpenAI }] = await Promise.all([
+    import("ai"),
+    import("@ai-sdk/openai"),
+  ]);
+  const modelName = process.env.AI_MODEL || "deepseek-chat";
+  const openai = createOpenAI({
+    apiKey: process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY,
+    baseURL: process.env.AI_BASE_URL || "https://api.deepseek.com/v1",
+  });
+  return { generateObject, model: openai(modelName) };
+}
 
 export async function analyzeFileAndGenerateRule(sampleText: string): Promise<Partial<ParseRule>> {
   const schema = z.object({
@@ -100,8 +105,9 @@ export async function analyzeFileAndGenerateRule(sampleText: string): Promise<Pa
 ${sampleText.slice(0, 4000)}`;
 
   try {
+    const { generateObject, model } = await getAI();
     const { object } = await generateObject({
-      model: deepseek(modelName),
+      model,
       schema,
       prompt,
       temperature: 0.2,

@@ -1,17 +1,23 @@
 /**
  * 文件读取器：读取 Excel (.xlsx/.xls) 和 PDF 文件，返回二维数组
+ * 所有大型依赖（xlsx、pdf-parse）均使用动态导入，避免拖慢 Vercel 构建
  */
-import * as XLSX from "xlsx";
+
+// ──── XLSX 懒加载 ────────────────────────────────────────────────────
+
+async function getXLSX() {
+  return await import("xlsx");
+}
 
 // ──── Excel 读取 ──────────────────────────────────────────────────────
 
-export function readExcel(buffer: ArrayBuffer): Record<string, any[][]> {
+export async function readExcel(buffer: ArrayBuffer): Promise<Record<string, any[][]>> {
+  const XLSX = await getXLSX();
   const wb = XLSX.read(buffer, { type: "array" });
   const result: Record<string, any[][]> = {};
 
   for (const name of wb.SheetNames) {
     const ws = wb.Sheets[name];
-    // 使用 sheet_to_json 的二维数组模式
     const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "", blankrows: false });
     result[name] = rows;
   }
@@ -20,7 +26,8 @@ export function readExcel(buffer: ArrayBuffer): Record<string, any[][]> {
 }
 
 /** 读取单个 Sheet */
-export function readExcelSheet(buffer: ArrayBuffer, sheetIndex: number = 0): any[][] {
+export async function readExcelSheet(buffer: ArrayBuffer, sheetIndex: number = 0): Promise<any[][]> {
+  const XLSX = await getXLSX();
   const wb = XLSX.read(buffer, { type: "array" });
   const name = wb.SheetNames[sheetIndex];
   if (!name) return [];
@@ -29,7 +36,8 @@ export function readExcelSheet(buffer: ArrayBuffer, sheetIndex: number = 0): any
 }
 
 /** 获取所有 Sheet 名称 */
-export function getSheetNames(buffer: ArrayBuffer): string[] {
+export async function getSheetNames(buffer: ArrayBuffer): Promise<string[]> {
+  const XLSX = await getXLSX();
   const wb = XLSX.read(buffer, { type: "array" });
   return wb.SheetNames;
 }
