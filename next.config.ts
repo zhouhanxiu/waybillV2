@@ -1,7 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["pdf-parse", "pg", "postgres"],
+  // 外部化所有大型服务端包，防止 Vercel 构建时内存超限挂起
+  serverExternalPackages: [
+    "pdf-parse",
+    "@neondatabase/serverless",
+    "@ai-sdk/openai",
+    "ai",
+    "xlsx",
+  ],
 };
 
 export default nextConfig;
