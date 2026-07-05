@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import postgres from "postgres";
 
 /** 清理环境变量中的不可见字符（BOM、零宽字符等） */
 function sanitizeUrl(raw: string): string {
@@ -11,16 +11,26 @@ function sanitizeUrl(raw: string): string {
     .trim();
 }
 
+let sql: ReturnType<typeof postgres> | null = null;
+
 export function getDb() {
   const raw = process.env.DATABASE_URL;
   if (!raw) throw new Error("DATABASE_URL is not set");
   const url = sanitizeUrl(raw);
-  return neon(url);
+  if (!sql) {
+    sql = postgres(url, {
+      prepare: false,
+      max: 10,
+      idle_timeout: 20,
+      connect_timeout: 10,
+    });
+  }
+  return sql;
 }
 
-export async function query<T = any>(sql: string, params?: any[]) {
+export async function query<T = any>(sqlText: string, params?: any[]) {
   const db = getDb();
-  return (await db(sql, params)) as T[];
+  return (await db.unsafe(sqlText, params)) as T[];
 }
 
 export async function initDb() {
