@@ -1,8 +1,20 @@
 import { neon } from "@neondatabase/serverless";
 
+/** 清理环境变量中的不可见字符（BOM、零宽字符等） */
+function sanitizeUrl(raw: string): string {
+  return raw
+    .replace(/^\uFEFF+/, "")     // BOM
+    .replace(/^\u200B+/, "")     // 零宽空格
+    .replace(/^\u200C+/, "")     // 零宽非连接符
+    .replace(/^\u200D+/, "")     // 零宽连接符
+    .replace(/^[\s\u00A0]+/, "") // 空白 & NBSP
+    .trim();
+}
+
 export function getDb() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set");
+  const raw = process.env.DATABASE_URL;
+  if (!raw) throw new Error("DATABASE_URL is not set");
+  const url = sanitizeUrl(raw);
   return neon(url);
 }
 
