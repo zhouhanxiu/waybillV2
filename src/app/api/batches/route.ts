@@ -13,13 +13,13 @@ export async function GET(req: NextRequest) {
 
     if (id) {
       // 获取批次详情（含运单）
-      const batches = await query<any[]>("SELECT * FROM import_batches WHERE id = $1", [id]);
+      const batches = await query("SELECT * FROM import_batches WHERE id = $1", [id]);
       if (batches.length === 0) {
         return NextResponse.json({ error: "批次不存在" }, { status: 404 });
       }
       const batch = batches[0];
 
-      const waybills = await query<any[]>(
+      const waybills = await query(
         "SELECT * FROM waybills WHERE batch_id = $1 ORDER BY created_at DESC",
         [id]
       );
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       let items: any[] = [];
       if (waybillIds.length > 0) {
         const placeholders = waybillIds.map((_, i) => `$${i + 1}`).join(",");
-        items = await query<any[]>(
+        items = await query(
           `SELECT * FROM order_items WHERE waybill_id IN (${placeholders}) ORDER BY created_at`,
           waybillIds
         );
@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const rows = await query<any[]>("SELECT * FROM import_batches ORDER BY created_at DESC");
+    const rows = await query("SELECT * FROM import_batches ORDER BY created_at DESC");
     return NextResponse.json(
       rows.map((r) => ({
         id: r.id,

@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 获取规则
-    const rules = await query<any[]>("SELECT * FROM import_rules WHERE id = $1", [ruleId]);
+    const rules = await query("SELECT * FROM import_rules WHERE id = $1", [ruleId]);
     if (rules.length === 0) {
       return NextResponse.json({ error: "规则不存在" }, { status: 404 });
     }

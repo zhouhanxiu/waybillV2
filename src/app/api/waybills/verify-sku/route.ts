@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 查找运单
-    const waybills = await query<any[]>(
+    const waybills = await query(
       "SELECT id FROM waybills WHERE external_code = $1 LIMIT 1",
       [externalCode]
     );
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 查找 SKU
-    const items = await query<any[]>(
+    const items = await query(
       "SELECT id FROM order_items WHERE waybill_id = $1 AND sku_code = $2 LIMIT 1",
       [waybills[0].id, skuCode]
     );

@@ -91,7 +91,7 @@ export default function HomePage() {
   const [editingCell, setEditingCell] = useState<{ waybillKey: string; itemIdx: number; field: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [aiGeneratedRule, setAiGeneratedRule] = useState<Partial<ParseRule> | null>(null);
+  const [aiGeneratedRule, setAiGeneratedRule] = useState<(Partial<ParseRule> & { guessed?: string[] }) | null>(null);
   const [showRuleManager, setShowRuleManager] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);

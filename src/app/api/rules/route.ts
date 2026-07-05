@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     const id = searchParams.get("id");
 
     if (id) {
-      const rows = await query<any[]>("SELECT * FROM import_rules WHERE id = $1", [id]);
+      const rows = await query("SELECT * FROM import_rules WHERE id = $1", [id]);
       if (rows.length === 0) {
         return NextResponse.json({ error: "规则不存在" }, { status: 404 });
       }
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const rows = await query<any[]>("SELECT * FROM import_rules ORDER BY updated_at DESC");
+    const rows = await query("SELECT * FROM import_rules ORDER BY updated_at DESC");
     return NextResponse.json(
       rows.map((r) => ({
         id: r.id,

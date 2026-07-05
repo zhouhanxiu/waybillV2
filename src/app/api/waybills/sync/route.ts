@@ -18,12 +18,12 @@ export async function POST(req: NextRequest) {
     let waybills: any[];
     if (externalCodes && externalCodes.length > 0) {
       const placeholders = externalCodes.map((_, i) => `$${i + 1}`).join(",");
-      waybills = await query<any[]>(
+      waybills = await query(
         `SELECT * FROM waybills WHERE external_code IN (${placeholders}) ORDER BY created_at DESC`,
         externalCodes
       );
     } else {
-      waybills = await query<any[]>(
+      waybills = await query(
         "SELECT * FROM waybills ORDER BY created_at DESC LIMIT 100"
       );
     }
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     // 获取每个运单的 SKU 明细
     const result = [];
     for (const wb of waybills) {
-      const items = await query<any[]>(
+      const items = await query(
         "SELECT * FROM order_items WHERE waybill_id = $1",
         [wb.id]
       );
