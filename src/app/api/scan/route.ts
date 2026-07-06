@@ -8,17 +8,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ticketStore } from "../tickets/store";
 
-export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const externalCode = searchParams.get("external_code");
-    const records = ticketStore.getScanRecords(externalCode || undefined);
-    return NextResponse.json({ records, total: records.length });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));

@@ -2,14 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Truck, ListOrdered, ClipboardList, LayoutDashboard, ScanLine } from "lucide-react";
+import { Home, Truck, ListOrdered, FileType } from "lucide-react";
 
 const navItems = [
-  { href: "/dashboard", label: "工作台", icon: LayoutDashboard },
   { href: "/", label: "智能导入", icon: Home },
   { href: "/waybills", label: "运单列表", icon: Truck },
-  { href: "/scan", label: "扫描品控", icon: ScanLine },
-  { href: "/tickets", label: "工单列表", icon: ClipboardList },
   { href: "/rules", label: "规则管理", icon: ListOrdered },
 ];
 

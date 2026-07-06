@@ -10,40 +10,12 @@ export async function GET(req: NextRequest) {
     const statusFilter = searchParams.get("status");
     const overdueFilter = searchParams.get("overdue") === "true";
     const typeFilter = searchParams.get("type");
-    const sourceFilter = searchParams.get("source");
-    const daysParam = searchParams.get("days");
-    const createdAfterParam = searchParams.get("created_after");
-    const createdBeforeParam = searchParams.get("created_before");
-
-    const statusSet = statusFilter ? new Set(statusFilter.split(",").map(s => s.trim()).filter(Boolean)) : null;
-
-    // 默认查询最近 3 天；days=all 表示全部时间
-    const now = Date.now();
-    let createdAfter: string;
-    let createdBefore: string;
-    if (createdAfterParam) {
-      createdAfter = new Date(createdAfterParam).toISOString();
-    } else if (daysParam === "all") {
-      createdAfter = new Date(0).toISOString();
-    } else {
-      const days = daysParam ? Number(daysParam) : 3;
-      createdAfter = new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
-    }
-    createdBefore = createdBeforeParam ? new Date(createdBeforeParam).toISOString() : new Date(now).toISOString();
 
     let items = ticketStore.listTickets();
 
-    // 按时间范围筛选
-    items = items.filter(t => t.created_at >= createdAfter && t.created_at <= createdBefore);
-
-    // 按状态筛选（支持逗号分隔多状态）
-    if (statusSet && statusSet.size > 0) {
-      items = items.filter(t => statusSet.has(t.status));
-    }
-
-    // 按来源筛选
-    if (sourceFilter) {
-      items = items.filter(t => t.source === sourceFilter);
+    // 按状态筛选
+    if (statusFilter) {
+      items = items.filter(t => t.status === statusFilter);
     }
 
     // 按异常类型筛选
@@ -53,6 +25,7 @@ export async function GET(req: NextRequest) {
 
     // 超时筛选
     if (overdueFilter) {
+      const now = Date.now();
       const overdueMs = 24 * 60 * 60 * 1000;
       items = items.filter(t => {
         if (t.status === "closed" || t.status === "approved") return false;
@@ -67,13 +40,11 @@ export async function GET(req: NextRequest) {
       total_all: ticketStore.getTotalCount(),
       open_count: ticketStore.getOpenCount(),
       overdue_count: ticketStore.getOverdueCount(),
-      filters: { days: daysParam || "3", created_after: createdAfter, created_before: createdBefore },
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
-
 
 export async function POST(req: NextRequest) {
   try {

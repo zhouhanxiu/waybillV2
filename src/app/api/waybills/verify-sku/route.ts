@@ -32,15 +32,14 @@ export async function GET(req: NextRequest) {
     }
 
     // 查找 SKU
-    const items = await query<{ id: string; sku_code: string; sku_name: string; quantity: number; spec: string }>(
-      "SELECT id, sku_code, sku_name, quantity, spec FROM order_items WHERE waybill_id = $1 AND sku_code = $2 LIMIT 1",
+    const items = await query(
+      "SELECT id FROM order_items WHERE waybill_id = $1 AND sku_code = $2 LIMIT 1",
       [waybills[0].id, skuCode]
     );
 
     return NextResponse.json({
       valid: items.length > 0,
       waybill_id: waybills[0].id,
-      item: items[0] || null,
       reason: items.length === 0 ? "SKU 不属于该运单" : undefined,
     });
   } catch (err: any) {
