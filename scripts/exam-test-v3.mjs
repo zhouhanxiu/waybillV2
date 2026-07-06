@@ -952,6 +952,51 @@ async function main() {
     process.exit(1);
   }
 
+  // 如果 V2 不可达但 V3 可达，继续用 fallback 数据测试
+  if (!health.v2h.ok) {
+    console.log("⚠ V2 不可达，将使用 fallback 数据进行测试");
+    testWaybills.push({
+      id: "wb_fallback_001",
+      external_code: "DP20260705001",
+      store_name: "朝阳旗舰店",
+      receiver_name: "张三",
+      receiver_phone: "13800138001",
+      receiver_address: "北京市朝阳区",
+      amount: 20,
+      created_at: new Date().toISOString(),
+      items: [
+        { id: "item_001", waybill_id: "wb_fallback_001", sku_code: "SKU001", sku_name: "东北大米", quantity: 20, spec: "5kg" },
+        { id: "item_002", waybill_id: "wb_fallback_001", sku_code: "SKU002", sku_name: "牛奶", quantity: 30, spec: "1L" },
+      ],
+    });
+    testWaybills.push({
+      id: "wb_fallback_002",
+      external_code: "DP20260705002",
+      store_name: "海淀分店",
+      receiver_name: "李四",
+      receiver_phone: "13800138002",
+      receiver_address: "北京市海淀区",
+      amount: 25,
+      created_at: new Date().toISOString(),
+      items: [
+        { id: "item_003", waybill_id: "wb_fallback_002", sku_code: "SKU002", sku_name: "蓝莓果酱", quantity: 25, spec: "500g" },
+      ],
+    });
+    testWaybills.push({
+      id: "wb_fallback_003",
+      external_code: "DP20260705003",
+      store_name: "西城店",
+      receiver_name: "王五",
+      receiver_phone: "13800138003",
+      receiver_address: "北京市西城区",
+      amount: 40,
+      created_at: new Date().toISOString(),
+      items: [
+        { id: "item_004", waybill_id: "wb_fallback_003", sku_code: "SKU003", sku_name: "纸巾", quantity: 40, spec: "3层" },
+      ],
+    });
+  }
+
   // 重置 V3 测试数据
   try {
     await v3("/api/tickets", {
