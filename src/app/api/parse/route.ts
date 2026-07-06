@@ -2,12 +2,13 @@
  * 解析 API — 上传文件 + 规则 ID，返回解析结果
  */
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { query, initDb } from "@/lib/db";
 import { readExcel, readPdf } from "@/lib/parser/reader";
 import { parseFile } from "@/lib/parser";
 
 export async function POST(req: NextRequest) {
   try {
+    await initDb();
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const ruleId = formData.get("ruleId") as string | null;
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
     if (sheetMode === "first") {
       const firstSheet = Object.keys(sheets)[0];
       if (firstSheet) {
-        const result = parseFile(sheets[firstSheet], rule);
+        const result = parseFile(sheets[firstSheet], rule, firstSheet);
         result.rows.forEach((r) => {
           (r as any)._sheet = firstSheet;
         });
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
       }
     } else if (sheetMode === "all") {
       for (const [name, rows] of Object.entries(sheets)) {
-        const result = parseFile(rows, rule);
+        const result = parseFile(rows, rule, name);
         result.rows.forEach((r) => {
           (r as any)._sheet = name;
         });
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
     } else if (sheetMode === "named" && sheetNames.length > 0) {
       for (const name of sheetNames) {
         if (sheets[name]) {
-          const result = parseFile(sheets[name], rule);
+          const result = parseFile(sheets[name], rule, name);
           result.rows.forEach((r) => {
             (r as any)._sheet = name;
           });

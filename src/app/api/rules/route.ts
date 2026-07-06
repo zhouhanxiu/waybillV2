@@ -2,12 +2,13 @@
  * 解析规则 CRUD API
  */
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { query, initDb } from "@/lib/db";
 import { uid } from "@/lib/utils";
 
 // GET /api/rules — 获取所有规则
 export async function GET(req: NextRequest) {
   try {
+    await initDb();
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
@@ -20,6 +21,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         id: r.id,
         name: r.name,
+        description: r.description,
         fileType: r.file_type,
         config: r.config,
         createdAt: r.created_at,
@@ -32,6 +34,7 @@ export async function GET(req: NextRequest) {
       rows.map((r) => ({
         id: r.id,
         name: r.name,
+        description: r.description,
         fileType: r.file_type,
         config: r.config,
         createdAt: r.created_at,
@@ -47,8 +50,9 @@ export async function GET(req: NextRequest) {
 // POST /api/rules — 创建规则
 export async function POST(req: NextRequest) {
   try {
+    await initDb();
     const body = await req.json();
-    const { name, fileType, config } = body;
+    const { name, description, fileType, config } = body;
 
     if (!name || !fileType || !config) {
       return NextResponse.json({ error: "缺少必要字段" }, { status: 400 });
@@ -56,11 +60,11 @@ export async function POST(req: NextRequest) {
 
     const id = uid("rule");
     await query(
-      `INSERT INTO import_rules (id, name, file_type, config) VALUES ($1, $2, $3, $4)`,
-      [id, name, fileType, JSON.stringify(config)]
+      `INSERT INTO import_rules (id, name, description, file_type, config) VALUES ($1, $2, $3, $4, $5)`,
+      [id, name, description || null, fileType, JSON.stringify(config)]
     );
 
-    return NextResponse.json({ id, name, fileType, config });
+    return NextResponse.json({ id, name, description, fileType, config });
   } catch (err: any) {
     console.error("POST /api/rules error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -70,16 +74,17 @@ export async function POST(req: NextRequest) {
 // PUT /api/rules — 更新规则
 export async function PUT(req: NextRequest) {
   try {
+    await initDb();
     const body = await req.json();
-    const { id, name, fileType, config } = body;
+    const { id, name, description, fileType, config } = body;
 
     if (!id) {
       return NextResponse.json({ error: "缺少规则 ID" }, { status: 400 });
     }
 
     await query(
-      `UPDATE import_rules SET name = COALESCE($2, name), file_type = COALESCE($3, file_type), config = COALESCE($4, config), updated_at = NOW() WHERE id = $1`,
-      [id, name, fileType, config ? JSON.stringify(config) : null]
+      `UPDATE import_rules SET name = COALESCE($2, name), description = COALESCE($3, description), file_type = COALESCE($4, file_type), config = COALESCE($5, config), updated_at = NOW() WHERE id = $1`,
+      [id, name, description, fileType, config ? JSON.stringify(config) : null]
     );
 
     return NextResponse.json({ success: true });
@@ -92,6 +97,7 @@ export async function PUT(req: NextRequest) {
 // DELETE /api/rules — 删除规则
 export async function DELETE(req: NextRequest) {
   try {
+    await initDb();
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 

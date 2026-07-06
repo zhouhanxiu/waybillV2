@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { AppSidebar } from "@/components/app-sidebar";
 
 export const metadata: Metadata = {
   title: "万能导入 - AI 智能多格式批量下单系统",
@@ -26,7 +27,10 @@ export default function RootLayout({
               </h1>
             </div>
           </header>
-          <main className="flex-1">{children}</main>
+          <div className="flex-1 flex">
+            <AppSidebar />
+            <main className="flex-1 overflow-auto">{children}</main>
+          </div>
         </div>
       </body>
     </html>

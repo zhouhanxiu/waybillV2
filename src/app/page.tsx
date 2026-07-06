@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   Upload,
   FileSpreadsheet,
@@ -20,7 +20,10 @@ import {
   Plus,
   RotateCw,
   ChevronDown,
+  Search,
 } from "lucide-react";
+import { validateAllWaybills, getErrorRowIndices, getErrorFieldsByRow } from "@/lib/validation";
+import { exportToExcel, AggregatedWaybill } from "@/lib/export";
 
 // ──── 类型 ──────────────────────────────────────────────────────────
 
@@ -36,28 +39,21 @@ type ParseRule = {
   createdAt?: string;
 };
 
-type AggregatedWaybill = {
-  key: string;
-  external_code?: string;
-  store_name?: string;
-  receiver_name?: string;
-  receiver_phone?: string;
-  receiver_address?: string;
-  remark?: string;
-  items: { sku_code?: string; sku_name?: string; quantity?: number; spec?: string }[];
-  _sheet?: string;
-};
-
 // ──── 工具函数 ──────────────────────────────────────────────────────
+
+function s(v: any): string {
+  return v == null ? "" : String(v).trim();
+}
 
 function aggregateByCode(rows: ParsedRow[]): AggregatedWaybill[] {
   const map = new Map<string, AggregatedWaybill>();
   for (const row of rows) {
-    const key = row.external_code || row.store_name || `row_${Math.random().toString(36).slice(2, 6)}`;
+    const hasExternalCode = !!s(row.external_code);
+    const key = s(row.external_code) || s(row.store_name) || `row_${Math.random().toString(36).slice(2, 6)}`;
     if (!map.has(key)) {
       map.set(key, {
         key,
-        external_code: row.external_code,
+        external_code: hasExternalCode ? row.external_code : undefined,
         store_name: row.store_name,
         receiver_name: row.receiver_name,
         receiver_phone: row.receiver_phone,
@@ -77,7 +73,71 @@ function aggregateByCode(rows: ParsedRow[]): AggregatedWaybill[] {
   return Array.from(map.values());
 }
 
-// ──── 组件 ──────────────────────────────────────────────────────────
+// ──── 进度条组件 ────────────────────────────────────────────────────
+
+function ProgressBar({ pct, label }: { pct: number; label?: string }) {
+  return (
+    <div className="w-full">
+      {label && <p className="text-sm text-ink-soft mb-2">{label}</p>}
+      <div className="w-full h-2 bg-bg rounded-full overflow-hidden">
+        <div
+          className="h-full bg-jingtian rounded-full transition-all duration-500 ease-out"
+          style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+        />
+      </div>
+      {pct > 0 && pct < 100 && (
+        <p className="text-xs text-ink-faint mt-1">{Math.round(pct)}%</p>
+      )}
+    </div>
+  );
+}
+
+// ──── Toast 提示组件 ─────────────────────────────────────────────────
+
+function Toast({
+  type,
+  message,
+  onClose,
+}: {
+  type: "success" | "error" | "warn";
+  message: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 4000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+
+  const bg =
+    type === "success"
+      ? "bg-success/10 border-success/30 text-success"
+      : type === "error"
+      ? "bg-danger-bg border-danger/30 text-danger"
+      : "bg-warn-bg border-warn/30 text-warn";
+
+  const icon =
+    type === "success" ? (
+      <CheckCircle className="w-4 h-4" />
+    ) : type === "error" ? (
+      <AlertCircle className="w-4 h-4" />
+    ) : (
+      <AlertCircle className="w-4 h-4" />
+    );
+
+  return (
+    <div
+      className={`fixed top-6 right-6 z-[100] flex items-center gap-2 px-4 py-3 rounded-xl border shadow-lg ${bg} animate-in slide-in-from-right`}
+    >
+      {icon}
+      <span className="text-sm font-medium">{message}</span>
+      <button onClick={onClose} className="ml-2 opacity-60 hover:opacity-100">
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// ──── 主页面组件 ────────────────────────────────────────────────────
 
 export default function HomePage() {
   const [step, setStep] = useState<Step>("upload");
@@ -93,6 +153,41 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [aiGeneratedRule, setAiGeneratedRule] = useState<(Partial<ParseRule> & { guessed?: string[] }) | null>(null);
   const [showRuleManager, setShowRuleManager] = useState(false);
+  const [waybillPage, setWaybillPage] = useState(1);
+  const [expandedWaybills, setExpandedWaybills] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<{ type: "success" | "error" | "warn"; message: string } | null>(null);
+  const [parseProgress, setParseProgress] = useState({ pct: 0, label: "" });
+  const [existingCodes, setExistingCodes] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitProgress, setSubmitProgress] = useState(0);
+
+  // 校验结果
+  const [validationErrors, setValidationErrors] = useState<ReturnType<typeof validateAllWaybills>>([]);
+  const errorRowSet = useMemo(() => getErrorRowIndices(validationErrors), [validationErrors]);
+  const errorFieldsByRow = useMemo(() => getErrorFieldsByRow(validationErrors), [validationErrors]);
+
+  const WAYBILLS_PER_PAGE = 50;
+
+  const totalSkuCount = useMemo(
+    () => aggregatedWaybills.reduce((sum, wb) => sum + wb.items.length, 0),
+    [aggregatedWaybills]
+  );
+
+  const pagedWaybills = useMemo(() => {
+    const start = (waybillPage - 1) * WAYBILLS_PER_PAGE;
+    return aggregatedWaybills.slice(start, start + WAYBILLS_PER_PAGE);
+  }, [aggregatedWaybills, waybillPage]);
+
+  const totalPages = Math.ceil(aggregatedWaybills.length / WAYBILLS_PER_PAGE);
+
+  const toggleWaybillExpand = useCallback((key: string) => {
+    setExpandedWaybills((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -128,10 +223,35 @@ export default function HomePage() {
     }
   }, [selectedRuleId]);
 
+  // ──── 加载已有外部编码 ──────────────────────────────────────────
+
+  const loadExistingCodes = useCallback(async () => {
+    try {
+      const res = await fetch("/api/existing-codes");
+      if (res.ok) {
+        const data = await res.json();
+        setExistingCodes(data.codes || []);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   // 初始化加载
   useEffect(() => {
     loadRules();
-  }, [loadRules]);
+    loadExistingCodes();
+  }, [loadRules, loadExistingCodes]);
+
+  // ──── 重新校验 ──────────────────────────────────────────────────
+
+  const revalidate = useCallback(
+    (waybills: AggregatedWaybill[]) => {
+      const errs = validateAllWaybills(waybills, existingCodes);
+      setValidationErrors(errs);
+    },
+    [existingCodes]
+  );
 
   // ──── AI 分析 ────────────────────────────────────────────────────
 
@@ -139,10 +259,13 @@ export default function HomePage() {
     if (!file) return;
     setLoading(true);
     setError("");
+    setParseProgress({ pct: 10, label: "正在上传文件..." });
 
     try {
       const formData = new FormData();
       formData.append("file", file);
+
+      setParseProgress({ pct: 30, label: "AI 正在分析文件结构..." });
 
       const res = await fetch("/api/analyze", {
         method: "POST",
@@ -154,15 +277,77 @@ export default function HomePage() {
         throw new Error(err.error || "AI 分析失败");
       }
 
+      setParseProgress({ pct: 80, label: "正在生成解析规则..." });
+
       const data = await res.json();
       setAiGeneratedRule(data);
       setStep("analyze");
+      setParseProgress({ pct: 100, label: "分析完成" });
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+      setTimeout(() => setParseProgress({ pct: 0, label: "" }), 500);
+    }
+  }, [file]);
+
+  // ──── 试解析预览 ────────────────────────────────────────────────
+
+  const handleTestParse = useCallback(async () => {
+    if (!file || !aiGeneratedRule?.config) return;
+    setLoading(true);
+    setError("");
+
+    try {
+      // 临时保存规则到服务器
+      const saveRes = await fetch("/api/rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: aiGeneratedRule.name || `临时规则_${Date.now()}`,
+          fileType: aiGeneratedRule.fileType || "excel",
+          config: aiGeneratedRule.config,
+        }),
+      });
+
+      if (!saveRes.ok) throw new Error("保存规则失败");
+      const savedRule = await saveRes.json();
+
+      // 执行解析
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("ruleId", savedRule.id);
+
+      const parseRes = await fetch("/api/parse", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!parseRes.ok) {
+        const err = await parseRes.json();
+        throw new Error(err.error || "试解析失败");
+      }
+
+      const parseData = await parseRes.json();
+      setParsedRows(parseData.rows || []);
+      setWarnings(parseData.warnings || []);
+      const wbs = aggregateByCode(parseData.rows || []);
+      setAggregatedWaybills(wbs);
+      revalidate(wbs);
+      setWaybillPage(1);
+      setStep("preview");
+      setToast({ type: "success", message: `试解析完成：${wbs.length} 条运单，${parseData.rows?.length || 0} 个 SKU` });
+
+      // 清理临时规则
+      try {
+        await fetch(`/api/rules?id=${savedRule.id}`, { method: "DELETE" });
+      } catch { /* ignore */ }
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [file]);
+  }, [file, aiGeneratedRule, revalidate]);
 
   // ──── 保存 AI 生成的规则 ────────────────────────────────────────
 
@@ -186,7 +371,7 @@ export default function HomePage() {
       const data = await res.json();
       setSelectedRuleId(data.id);
       await loadRules();
-      setStep("preview");
+      setToast({ type: "success", message: "规则已保存，正在解析..." });
 
       // 自动执行解析
       await handleParse(data.id);
@@ -197,7 +382,7 @@ export default function HomePage() {
     }
   }, [aiGeneratedRule, loadRules]);
 
-  // ──── 手动创建规则后解析 ────────────────────────────────────────
+  // ──── 手动选择规则后解析 ────────────────────────────────────────
 
   const handleManualParse = useCallback(async () => {
     if (!selectedRuleId) {
@@ -209,42 +394,64 @@ export default function HomePage() {
 
   // ──── 执行解析 ──────────────────────────────────────────────────
 
-  const handleParse = useCallback(async (ruleId: string) => {
-    if (!file) return;
-    setLoading(true);
-    setError("");
+  const handleParse = useCallback(
+    async (ruleId: string) => {
+      if (!file) return;
+      setLoading(true);
+      setError("");
+      setParseProgress({ pct: 10, label: "正在读取文件..." });
 
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("ruleId", ruleId);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("ruleId", ruleId);
 
-      const res = await fetch("/api/parse", {
-        method: "POST",
-        body: formData,
-      });
+        setParseProgress({ pct: 40, label: "正在执行解析规则..." });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "解析失败");
+        const res = await fetch("/api/parse", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "解析失败");
+        }
+
+        setParseProgress({ pct: 80, label: "正在聚合运单数据..." });
+
+        const data = await res.json();
+        setParsedRows(data.rows || []);
+        setWarnings(data.warnings || []);
+        const wbs = aggregateByCode(data.rows || []);
+        setAggregatedWaybills(wbs);
+        revalidate(wbs);
+        setWaybillPage(1);
+        setStep("preview");
+        setParseProgress({ pct: 100, label: "解析完成" });
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+        setTimeout(() => setParseProgress({ pct: 0, label: "" }), 500);
       }
-
-      const data = await res.json();
-      setParsedRows(data.rows || []);
-      setWarnings(data.warnings || []);
-      setAggregatedWaybills(aggregateByCode(data.rows || []));
-      setStep("preview");
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [file]);
+    },
+    [file, revalidate]
+  );
 
   // ──── 提交运单 ──────────────────────────────────────────────────
 
   const handleSubmit = useCallback(async () => {
-    setLoading(true);
+    // 提交前校验
+    const errs = validateAllWaybills(aggregatedWaybills, existingCodes);
+    setValidationErrors(errs);
+    if (errs.length > 0) {
+      setError(`存在 ${errs.length} 个校验错误，请修正后再提交`);
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitProgress(10);
     setError("");
 
     try {
@@ -258,6 +465,8 @@ export default function HomePage() {
         items: wb.items,
       }));
 
+      setSubmitProgress(30);
+
       const res = await fetch("/api/batches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -268,26 +477,31 @@ export default function HomePage() {
         }),
       });
 
+      setSubmitProgress(80);
+
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "提交失败");
       }
 
       const data = await res.json();
+      setSubmitProgress(100);
+      setToast({ type: "success", message: `提交成功：${data.waybillCount} 条运单已导入` });
       setStep("done");
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setSubmitting(false);
+      setTimeout(() => setSubmitProgress(0), 500);
     }
-  }, [aggregatedWaybills, fileName, selectedRuleId]);
+  }, [aggregatedWaybills, fileName, selectedRuleId, existingCodes]);
 
   // ──── 单元格编辑 ────────────────────────────────────────────────
 
   const handleCellEdit = useCallback(
     (waybillKey: string, itemIdx: number, field: string, value: string) => {
-      setAggregatedWaybills((prev) =>
-        prev.map((wb) => {
+      setAggregatedWaybills((prev) => {
+        const updated = prev.map((wb) => {
           if (wb.key !== waybillKey) return wb;
           if (field.startsWith("item_")) {
             const itemField = field.replace("item_", "");
@@ -299,17 +513,57 @@ export default function HomePage() {
             return { ...wb, items: newItems };
           }
           return { ...wb, [field]: value };
-        })
-      );
+        });
+        // 编辑后重新校验
+        setTimeout(() => revalidate(updated), 0);
+        return updated;
+      });
     },
-    []
+    [revalidate]
   );
 
   // ──── 删除行 ────────────────────────────────────────────────────
 
-  const handleDeleteRow = useCallback((waybillKey: string) => {
-    setAggregatedWaybills((prev) => prev.filter((wb) => wb.key !== waybillKey));
+  const handleDeleteRow = useCallback(
+    (waybillKey: string) => {
+      setAggregatedWaybills((prev) => {
+        const updated = prev.filter((wb) => wb.key !== waybillKey);
+        revalidate(updated);
+        return updated;
+      });
+      setToast({ type: "success", message: "已删除运单" });
+    },
+    [revalidate]
+  );
+
+  // ──── 新增空行 ──────────────────────────────────────────────────
+
+  const handleAddRow = useCallback(() => {
+    const newKey = `new_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newWb: AggregatedWaybill = {
+      key: newKey,
+      external_code: "",
+      store_name: "",
+      receiver_name: "",
+      receiver_phone: "",
+      receiver_address: "",
+      remark: "",
+      items: [{ sku_code: "", sku_name: "", quantity: 1, spec: "" }],
+    };
+    setAggregatedWaybills((prev) => [...prev, newWb]);
+    setToast({ type: "success", message: "已添加空行" });
   }, []);
+
+  // ──── 导出 Excel ────────────────────────────────────────────────
+
+  const handleExport = useCallback(async () => {
+    try {
+      await exportToExcel(aggregatedWaybills, fileName.replace(/\.[^.]+$/, ""));
+      setToast({ type: "success", message: "导出成功" });
+    } catch (err: any) {
+      setError("导出失败：" + (err.message || "未知错误"));
+    }
+  }, [aggregatedWaybills, fileName]);
 
   // ──── 重置 ──────────────────────────────────────────────────────
 
@@ -321,13 +575,20 @@ export default function HomePage() {
     setAggregatedWaybills([]);
     setWarnings([]);
     setAiGeneratedRule(null);
+    setWaybillPage(1);
     setError("");
+    setValidationErrors([]);
+    setParseProgress({ pct: 0, label: "" });
+    setSubmitProgress(0);
   }, []);
 
   // ──── 渲染 ──────────────────────────────────────────────────────
 
   return (
     <div className="max-w-[1200px] mx-auto px-6 py-8">
+      {/* Toast */}
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+
       {/* 步骤指示器 */}
       <div className="mb-10">
         <div className="flex items-center justify-center gap-2">
@@ -369,11 +630,23 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* 进度条 */}
+      {parseProgress.pct > 0 && (
+        <div className="mb-6 max-w-lg mx-auto">
+          <ProgressBar pct={parseProgress.pct} label={parseProgress.label} />
+        </div>
+      )}
+      {submitProgress > 0 && (
+        <div className="mb-6 max-w-lg mx-auto">
+          <ProgressBar pct={submitProgress} label="正在提交运单..." />
+        </div>
+      )}
+
       {/* 错误提示 */}
       {error && (
         <div className="mb-6 p-4 rounded-xl bg-danger-bg border border-danger/20 text-danger flex items-start gap-3">
           <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <p className="font-medium text-sm">操作失败</p>
             <p className="text-sm opacity-80">{error}</p>
           </div>
@@ -569,6 +842,20 @@ export default function HomePage() {
 
               <div>
                 <label className="block text-sm font-medium text-ink-soft mb-1">
+                  解析引擎
+                </label>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className={"px-2.5 py-1 rounded-lg text-xs font-medium border " + (aiGeneratedRule.config?.engine === "matrix" ? "bg-purple-50 border-purple-200 text-purple-700" : aiGeneratedRule.config?.engine === "card" ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-green-50 border-green-200 text-green-700")}>
+                    {aiGeneratedRule.config?.engine === "matrix" ? "矩阵转置引擎" : aiGeneratedRule.config?.engine === "card" ? "卡片拆分引擎" : "行表格引擎"}
+                  </span>
+                  <span className="text-xs text-ink-faint">
+                    {aiGeneratedRule.config?.engine === "matrix" ? "门店作为列名，自动转置为行" : aiGeneratedRule.config?.engine === "card" ? "按调拨记录卡片拆分" : "标准表格行解析"}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-ink-soft mb-1">
                   规则配置预览
                 </label>
                 <pre className="p-4 rounded-xl bg-bg border border-line text-xs text-ink-soft overflow-auto max-h-48">
@@ -584,6 +871,14 @@ export default function HomePage() {
               >
                 <ArrowLeft className="w-4 h-4" />
                 返回
+              </button>
+              <button
+                onClick={handleTestParse}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-jingtian text-jingtian hover:bg-jingtian-soft transition-colors text-sm"
+              >
+                <Eye className="w-4 h-4" />
+                试解析预览
               </button>
               <button
                 onClick={handleSaveRule}
@@ -606,14 +901,12 @@ export default function HomePage() {
       {step === "preview" && (
         <div>
           {/* 统计栏 */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+            <div className="flex items-center gap-4 flex-wrap">
               <div className="px-4 py-2 rounded-xl bg-card border border-line shadow-sm">
                 <span className="text-sm text-ink-faint">解析结果：</span>
                 <span className="font-semibold text-jingtian">{aggregatedWaybills.length} 条运单</span>
-                <span className="text-sm text-ink-faint ml-2">
-                  ({aggregatedWaybills.reduce((sum, wb) => sum + wb.items.length, 0)} 个 SKU)
-                </span>
+                <span className="text-sm text-ink-faint ml-2">({totalSkuCount} 个 SKU)</span>
               </div>
               {warnings.length > 0 && (
                 <div className="px-4 py-2 rounded-xl bg-warn-bg border border-warn/20">
@@ -623,8 +916,39 @@ export default function HomePage() {
                   </span>
                 </div>
               )}
+              {validationErrors.length > 0 && (
+                <div className="px-4 py-2 rounded-xl bg-danger-bg border border-danger/20">
+                  <span className="text-sm text-danger">
+                    <AlertCircle className="w-4 h-4 inline mr-1" />
+                    {validationErrors.length} 个校验错误
+                  </span>
+                </div>
+              )}
             </div>
             <div className="flex gap-3">
+              <button
+                onClick={handleAddRow}
+                className="flex items-center gap-1 px-3 py-2 rounded-xl border border-line text-ink-soft hover:bg-bg transition-colors text-xs"
+                title="新增空行"
+              >
+                <Plus className="w-4 h-4" />
+                新增
+              </button>
+              <button
+                onClick={() => setExpandedWaybills(new Set())}
+                className="flex items-center gap-1 px-3 py-2 rounded-xl border border-line text-ink-soft hover:bg-bg transition-colors text-xs"
+                title="全部收起"
+              >
+                全部收起
+              </button>
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-1 px-3 py-2 rounded-xl border border-line text-ink-soft hover:bg-bg transition-colors text-xs"
+                title="导出 Excel"
+              >
+                <Download className="w-4 h-4" />
+                导出
+              </button>
               <button
                 onClick={() => setStep("upload")}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl border border-line text-ink-soft hover:bg-bg transition-colors text-sm"
@@ -634,10 +958,10 @@ export default function HomePage() {
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={loading || aggregatedWaybills.length === 0}
+                disabled={submitting || aggregatedWaybills.length === 0}
                 className="flex items-center gap-2 px-6 py-2 rounded-xl bg-jingtian text-white font-medium hover:bg-jingtian-dark transition-colors disabled:opacity-50 text-sm"
               >
-                {loading ? (
+                {submitting ? (
                   <RotateCw className="w-4 h-4 animate-spin" />
                 ) : (
                   <CheckCircle className="w-4 h-4" />
@@ -646,6 +970,36 @@ export default function HomePage() {
               </button>
             </div>
           </div>
+
+          {/* 校验错误汇总 */}
+          {validationErrors.length > 0 && (
+            <div className="mb-4 p-4 rounded-xl bg-danger-bg border border-danger/20">
+              <p className="text-sm font-medium text-danger mb-2">
+                <AlertCircle className="w-4 h-4 inline mr-1" />
+                数据校验发现 {validationErrors.length} 个问题：
+              </p>
+              <div className="max-h-[200px] overflow-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-danger/70">
+                      <th className="text-left py-1 pr-2">行号</th>
+                      <th className="text-left py-1 pr-2">字段</th>
+                      <th className="text-left py-1">错误原因</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {validationErrors.map((e, i) => (
+                      <tr key={i} className="border-t border-danger/10">
+                        <td className="py-1 pr-2 text-danger font-medium">第 {e.rowIndex + 1} 行</td>
+                        <td className="py-1 pr-2 text-danger/80">{e.field}</td>
+                        <td className="py-1 text-danger/80">{e.message}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* 运单表格 */}
           <div className="bg-card rounded-2xl border border-line shadow-sm overflow-hidden">
@@ -656,234 +1010,214 @@ export default function HomePage() {
                     <th className="text-left px-4 py-3 font-semibold text-ink-soft w-12">#</th>
                     <th className="text-left px-4 py-3 font-semibold text-ink-soft">外部编码</th>
                     <th className="text-left px-4 py-3 font-semibold text-ink-soft">门店</th>
-                    <th className="text-left px-4 py-3 font-semibold text-ink-soft">SKU 编码</th>
-                    <th className="text-left px-4 py-3 font-semibold text-ink-soft">SKU 名称</th>
-                    <th className="text-right px-4 py-3 font-semibold text-ink-soft">数量</th>
-                    <th className="text-left px-4 py-3 font-semibold text-ink-soft">规格</th>
-                    <th className="text-left px-4 py-3 font-semibold text-ink-soft">收件人</th>
-                    <th className="text-left px-4 py-3 font-semibold text-ink-soft">电话</th>
-                    <th className="text-left px-4 py-3 font-semibold text-ink-soft">地址</th>
+                    <th className="text-left px-4 py-3 font-semibold text-ink-soft">SKU 概况</th>
+                    <th className="text-left px-4 py-3 font-semibold text-ink-soft" colSpan={5}>收货信息</th>
                     <th className="text-center px-4 py-3 font-semibold text-ink-soft w-20">操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {aggregatedWaybills.map((wb, wbIdx) =>
-                    wb.items.map((item, itemIdx) => {
-                      const cellKey = `${wb.key}_${itemIdx}`;
-                      return (
-                        <tr
-                          key={cellKey}
-                          className="border-b border-line-soft hover:bg-jingtian-soft/30 transition-colors"
-                        >
-                          {itemIdx === 0 && (
-                            <>
-                              <td
-                                rowSpan={wb.items.length}
-                                className="px-4 py-3 text-ink-faint align-top"
-                              >
-                                {wbIdx + 1}
-                              </td>
-                              <td
-                                rowSpan={wb.items.length}
-                                className="px-4 py-3 align-top"
-                              >
-                                <EditableCell
-                                  value={wb.external_code || ""}
-                                  isEditing={
-                                    editingCell?.waybillKey === wb.key &&
-                                    editingCell?.itemIdx === -1 &&
-                                    editingCell?.field === "external_code"
-                                  }
-                                  onEdit={() =>
-                                    setEditingCell({ waybillKey: wb.key, itemIdx: -1, field: "external_code" })
-                                  }
-                                  onSave={(v) => {
-                                    handleCellEdit(wb.key, -1, "external_code", v);
-                                    setEditingCell(null);
-                                  }}
-                                  onCancel={() => setEditingCell(null)}
-                                />
-                              </td>
-                              <td
-                                rowSpan={wb.items.length}
-                                className="px-4 py-3 align-top"
-                              >
-                                <EditableCell
-                                  value={wb.store_name || ""}
-                                  isEditing={
-                                    editingCell?.waybillKey === wb.key &&
-                                    editingCell?.itemIdx === -1 &&
-                                    editingCell?.field === "store_name"
-                                  }
-                                  onEdit={() =>
-                                    setEditingCell({ waybillKey: wb.key, itemIdx: -1, field: "store_name" })
-                                  }
-                                  onSave={(v) => {
-                                    handleCellEdit(wb.key, -1, "store_name", v);
-                                    setEditingCell(null);
-                                  }}
-                                  onCancel={() => setEditingCell(null)}
-                                />
-                              </td>
-                            </>
+                  {pagedWaybills.map((wb, wbIdx) => {
+                    const realWbIdx = (waybillPage - 1) * WAYBILLS_PER_PAGE + wbIdx;
+                    const isExpanded = expandedWaybills.has(wb.key);
+                    const skuCount = wb.items.length;
+                    const hasError = errorRowSet.has(realWbIdx);
+                    const errFields = errorFieldsByRow.get(realWbIdx);
+
+                    return (
+                      <tr
+                        key={wb.key}
+                        className={`border-b border-line-soft hover:bg-jingtian-soft/30 transition-colors cursor-pointer ${
+                          hasError ? "bg-danger-bg/30" : ""
+                        }`}
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest(".row-action")) return;
+                          toggleWaybillExpand(wb.key);
+                        }}
+                      >
+                        <td className="px-4 py-3 text-ink-faint align-top">
+                          {realWbIdx + 1}
+                          {hasError && <AlertCircle className="w-3 h-3 text-danger inline ml-1" />}
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <EditableCell
+                            value={wb.external_code || ""}
+                            isEditing={
+                              editingCell?.waybillKey === wb.key &&
+                              editingCell?.itemIdx === -1 &&
+                              editingCell?.field === "external_code"
+                            }
+                            hasError={errFields?.has("external_code")}
+                            onEdit={(e) => { e?.stopPropagation?.(); setEditingCell({ waybillKey: wb.key, itemIdx: -1, field: "external_code" }); }}
+                            onSave={(v) => {
+                              handleCellEdit(wb.key, -1, "external_code", v);
+                              setEditingCell(null);
+                            }}
+                            onCancel={() => setEditingCell(null)}
+                          />
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <EditableCell
+                            value={wb.store_name || ""}
+                            isEditing={
+                              editingCell?.waybillKey === wb.key &&
+                              editingCell?.itemIdx === -1 &&
+                              editingCell?.field === "store_name"
+                            }
+                            hasError={errFields?.has("store_name") || errFields?.has("receiver_info")}
+                            onEdit={(e) => { e?.stopPropagation?.(); setEditingCell({ waybillKey: wb.key, itemIdx: -1, field: "store_name" }); }}
+                            onSave={(v) => {
+                              handleCellEdit(wb.key, -1, "store_name", v);
+                              setEditingCell(null);
+                            }}
+                            onCancel={() => setEditingCell(null)}
+                          />
+                        </td>
+                        <td className="px-4 py-3 align-top text-ink-faint">
+                          <span className="inline-flex items-center gap-1">
+                            <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                            {skuCount} 个 SKU
+                          </span>
+                        </td>
+                        <td colSpan={5} className="px-4 py-3 align-top text-ink-faint text-sm">
+                          {wb.receiver_name && (
+                            <span className={errFields?.has("receiver_name") ? "text-danger" : ""}>
+                              收件人：{wb.receiver_name}
+                            </span>
                           )}
-                          <td className="px-4 py-3">
-                            <EditableCell
-                              value={item.sku_code || ""}
-                              isEditing={
-                                editingCell?.waybillKey === wb.key &&
-                                editingCell?.itemIdx === itemIdx &&
-                                editingCell?.field === "item_sku_code"
-                              }
-                              onEdit={() =>
-                                setEditingCell({ waybillKey: wb.key, itemIdx, field: "item_sku_code" })
-                              }
-                              onSave={(v) => {
-                                handleCellEdit(wb.key, itemIdx, "item_sku_code", v);
-                                setEditingCell(null);
-                              }}
-                              onCancel={() => setEditingCell(null)}
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            <EditableCell
-                              value={item.sku_name || ""}
-                              isEditing={
-                                editingCell?.waybillKey === wb.key &&
-                                editingCell?.itemIdx === itemIdx &&
-                                editingCell?.field === "item_sku_name"
-                              }
-                              onEdit={() =>
-                                setEditingCell({ waybillKey: wb.key, itemIdx, field: "item_sku_name" })
-                              }
-                              onSave={(v) => {
-                                handleCellEdit(wb.key, itemIdx, "item_sku_name", v);
-                                setEditingCell(null);
-                              }}
-                              onCancel={() => setEditingCell(null)}
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <EditableCell
-                              value={String(item.quantity ?? "")}
-                              isEditing={
-                                editingCell?.waybillKey === wb.key &&
-                                editingCell?.itemIdx === itemIdx &&
-                                editingCell?.field === "item_quantity"
-                              }
-                              onEdit={() =>
-                                setEditingCell({ waybillKey: wb.key, itemIdx, field: "item_quantity" })
-                              }
-                              onSave={(v) => {
-                                handleCellEdit(wb.key, itemIdx, "item_quantity", v);
-                                setEditingCell(null);
-                              }}
-                              onCancel={() => setEditingCell(null)}
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            <EditableCell
-                              value={item.spec || ""}
-                              isEditing={
-                                editingCell?.waybillKey === wb.key &&
-                                editingCell?.itemIdx === itemIdx &&
-                                editingCell?.field === "item_spec"
-                              }
-                              onEdit={() =>
-                                setEditingCell({ waybillKey: wb.key, itemIdx, field: "item_spec" })
-                              }
-                              onSave={(v) => {
-                                handleCellEdit(wb.key, itemIdx, "item_spec", v);
-                                setEditingCell(null);
-                              }}
-                              onCancel={() => setEditingCell(null)}
-                            />
-                          </td>
-                          {itemIdx === 0 && (
-                            <>
-                              <td
-                                rowSpan={wb.items.length}
-                                className="px-4 py-3 align-top"
-                              >
-                                <EditableCell
-                                  value={wb.receiver_name || ""}
-                                  isEditing={
-                                    editingCell?.waybillKey === wb.key &&
-                                    editingCell?.itemIdx === -1 &&
-                                    editingCell?.field === "receiver_name"
-                                  }
-                                  onEdit={() =>
-                                    setEditingCell({ waybillKey: wb.key, itemIdx: -1, field: "receiver_name" })
-                                  }
-                                  onSave={(v) => {
-                                    handleCellEdit(wb.key, -1, "receiver_name", v);
-                                    setEditingCell(null);
-                                  }}
-                                  onCancel={() => setEditingCell(null)}
-                                />
-                              </td>
-                              <td
-                                rowSpan={wb.items.length}
-                                className="px-4 py-3 align-top"
-                              >
-                                <EditableCell
-                                  value={wb.receiver_phone || ""}
-                                  isEditing={
-                                    editingCell?.waybillKey === wb.key &&
-                                    editingCell?.itemIdx === -1 &&
-                                    editingCell?.field === "receiver_phone"
-                                  }
-                                  onEdit={() =>
-                                    setEditingCell({ waybillKey: wb.key, itemIdx: -1, field: "receiver_phone" })
-                                  }
-                                  onSave={(v) => {
-                                    handleCellEdit(wb.key, -1, "receiver_phone", v);
-                                    setEditingCell(null);
-                                  }}
-                                  onCancel={() => setEditingCell(null)}
-                                />
-                              </td>
-                              <td
-                                rowSpan={wb.items.length}
-                                className="px-4 py-3 align-top max-w-[200px] truncate"
-                              >
-                                <EditableCell
-                                  value={wb.receiver_address || ""}
-                                  isEditing={
-                                    editingCell?.waybillKey === wb.key &&
-                                    editingCell?.itemIdx === -1 &&
-                                    editingCell?.field === "receiver_address"
-                                  }
-                                  onEdit={() =>
-                                    setEditingCell({ waybillKey: wb.key, itemIdx: -1, field: "receiver_address" })
-                                  }
-                                  onSave={(v) => {
-                                    handleCellEdit(wb.key, -1, "receiver_address", v);
-                                    setEditingCell(null);
-                                  }}
-                                  onCancel={() => setEditingCell(null)}
-                                />
-                              </td>
-                            </>
+                          {wb.receiver_phone && (
+                            <span className={`ml-3 ${errFields?.has("receiver_phone") ? "text-danger" : ""}`}>
+                              电话：{wb.receiver_phone}
+                            </span>
                           )}
-                          <td className="px-4 py-3 text-center">
-                            {itemIdx === 0 && (
-                              <button
-                                onClick={() => handleDeleteRow(wb.key)}
-                                className="p-1.5 rounded-lg text-ink-faint hover:text-danger hover:bg-danger-bg transition-colors"
-                                title="删除此行"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
+                          {!wb.receiver_name && !wb.receiver_phone && !wb.receiver_address && !wb.store_name && (
+                            <span className="text-danger italic">收货信息缺失</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center align-top">
+                          <button
+                            className="row-action p-1.5 rounded-lg text-ink-faint hover:text-danger hover:bg-danger-bg transition-colors"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteRow(wb.key); }}
+                            title="删除此行"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
+                {/* SKU 展开行 */}
+                {pagedWaybills.map((wb) => {
+                  const realWbIdx = (waybillPage - 1) * WAYBILLS_PER_PAGE + pagedWaybills.indexOf(wb);
+                  const isExpanded = expandedWaybills.has(wb.key);
+                  if (!isExpanded) return null;
+                  const errFields = errorFieldsByRow.get(realWbIdx);
+                  return (
+                    <tr key={`${wb.key}_skus`} className="bg-bg/60">
+                      <td colSpan={10} className="p-0">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-line-soft">
+                              <th className="text-left px-4 py-2 font-medium text-ink-soft text-xs">SKU 编码</th>
+                              <th className="text-left px-4 py-2 font-medium text-ink-soft text-xs">SKU 名称</th>
+                              <th className="text-right px-4 py-2 font-medium text-ink-soft text-xs">数量</th>
+                              <th className="text-left px-4 py-2 font-medium text-ink-soft text-xs">规格</th>
+                              <th className="text-left px-4 py-2 font-medium text-ink-soft text-xs">地址</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {wb.items.map((item, itemIdx) => (
+                              <tr key={`${wb.key}_item_${itemIdx}`} className="border-b border-line-soft/50 hover:bg-jingtian-soft/20">
+                                <td className="px-4 py-2">
+                                  <EditableCell
+                                    value={item.sku_code || ""}
+                                    isEditing={
+                                      editingCell?.waybillKey === wb.key &&
+                                      editingCell?.itemIdx === itemIdx &&
+                                      editingCell?.field === "item_sku_code"
+                                    }
+                                    hasError={errFields?.has("sku_code")}
+                                    onEdit={() => setEditingCell({ waybillKey: wb.key, itemIdx, field: "item_sku_code" })}
+                                    onSave={(v) => { handleCellEdit(wb.key, itemIdx, "item_sku_code", v); setEditingCell(null); }}
+                                    onCancel={() => setEditingCell(null)}
+                                  />
+                                </td>
+                                <td className="px-4 py-2">
+                                  <EditableCell
+                                    value={item.sku_name || ""}
+                                    isEditing={
+                                      editingCell?.waybillKey === wb.key &&
+                                      editingCell?.itemIdx === itemIdx &&
+                                      editingCell?.field === "item_sku_name"
+                                    }
+                                    hasError={errFields?.has("sku_name")}
+                                    onEdit={() => setEditingCell({ waybillKey: wb.key, itemIdx, field: "item_sku_name" })}
+                                    onSave={(v) => { handleCellEdit(wb.key, itemIdx, "item_sku_name", v); setEditingCell(null); }}
+                                    onCancel={() => setEditingCell(null)}
+                                  />
+                                </td>
+                                <td className="px-4 py-2 text-right">
+                                  <EditableCell
+                                    value={String(item.quantity ?? "")}
+                                    isEditing={
+                                      editingCell?.waybillKey === wb.key &&
+                                      editingCell?.itemIdx === itemIdx &&
+                                      editingCell?.field === "item_quantity"
+                                    }
+                                    hasError={errFields?.has("quantity")}
+                                    onEdit={() => setEditingCell({ waybillKey: wb.key, itemIdx, field: "item_quantity" })}
+                                    onSave={(v) => { handleCellEdit(wb.key, itemIdx, "item_quantity", v); setEditingCell(null); }}
+                                    onCancel={() => setEditingCell(null)}
+                                  />
+                                </td>
+                                <td className="px-4 py-2">
+                                  <EditableCell
+                                    value={item.spec || ""}
+                                    isEditing={
+                                      editingCell?.waybillKey === wb.key &&
+                                      editingCell?.itemIdx === itemIdx &&
+                                      editingCell?.field === "item_spec"
+                                    }
+                                    onEdit={() => setEditingCell({ waybillKey: wb.key, itemIdx, field: "item_spec" })}
+                                    onSave={(v) => { handleCellEdit(wb.key, itemIdx, "item_spec", v); setEditingCell(null); }}
+                                    onCancel={() => setEditingCell(null)}
+                                  />
+                                </td>
+                                <td className="px-4 py-2 text-ink-faint text-xs max-w-[180px] truncate">
+                                  {wb.receiver_address || "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  );
+                })}
               </table>
             </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-4 py-3 border-t border-line bg-bg text-sm">
+                <button
+                  onClick={() => setWaybillPage((p) => Math.max(1, p - 1))}
+                  disabled={waybillPage <= 1}
+                  className="px-3 py-1.5 rounded-lg border border-line text-ink-soft hover:bg-bg disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  上一页
+                </button>
+                <span className="text-ink-soft">
+                  第 <span className="font-medium text-ink">{waybillPage}</span> / {totalPages} 页
+                </span>
+                <button
+                  onClick={() => setWaybillPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={waybillPage >= totalPages}
+                  className="px-3 py-1.5 rounded-lg border border-line text-ink-soft hover:bg-bg disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  下一页
+                </button>
+              </div>
+            )}
 
             {aggregatedWaybills.length === 0 && (
               <div className="py-16 text-center text-ink-faint">
@@ -960,13 +1294,15 @@ export default function HomePage() {
 function EditableCell({
   value,
   isEditing,
+  hasError,
   onEdit,
   onSave,
   onCancel,
 }: {
   value: string;
   isEditing: boolean;
-  onEdit: () => void;
+  hasError?: boolean;
+  onEdit: (e?: React.MouseEvent) => void;
   onSave: (val: string) => void;
   onCancel: () => void;
 }) {
@@ -993,7 +1329,15 @@ function EditableCell({
       className="group flex items-center gap-1 cursor-pointer min-w-[60px] min-h-[24px]"
       onClick={onEdit}
     >
-      <span className={value ? "text-ink" : "text-ink-faint italic"}>
+      <span
+        className={
+          hasError
+            ? "text-danger font-medium"
+            : value
+            ? "text-ink"
+            : "text-ink-faint italic"
+        }
+      >
         {value || "空"}
       </span>
       <Pencil className="w-3 h-3 text-ink-faint opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
@@ -1020,9 +1364,6 @@ function RuleManager({
   onParse: () => void;
   file: File | null;
 }) {
-  const [loading, setLoading] = useState(false);
-  const [editingRule, setEditingRule] = useState<ParseRule | null>(null);
-
   const handleDelete = async (id: string) => {
     if (!confirm("确定删除此规则？")) return;
     try {
@@ -1068,10 +1409,17 @@ function RuleManager({
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium text-ink text-sm">{rule.name}</p>
-                      <p className="text-xs text-ink-faint mt-0.5">
-                        {rule.fileType === "pdf" ? "PDF" : "Excel"} ·{" "}
-                        {rule.createdAt ? new Date(rule.createdAt).toLocaleDateString("zh-CN") : "—"}
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-ink-faint">
+                          {rule.fileType === "pdf" ? "PDF" : "Excel"} ·{" "}
+                          {rule.createdAt ? new Date(rule.createdAt).toLocaleDateString("zh-CN") : "—"}
+                        </span>
+                        {(rule.config as any)?.engine && (
+                          <span className={"text-[10px] px-1.5 py-0.5 rounded border " + ((rule.config as any).engine === "matrix" ? "bg-purple-50 border-purple-200 text-purple-700" : (rule.config as any).engine === "card" ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-green-50 border-green-200 text-green-700")}>
+                            {(rule.config as any).engine === "matrix" ? "矩阵" : (rule.config as any).engine === "card" ? "卡片" : "行"}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
                       <button

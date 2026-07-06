@@ -2,12 +2,14 @@
  * 导入批次 & 运单提交 API
  */
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { query, initDb } from "@/lib/db";
 import { uid } from "@/lib/utils";
+import { assignGeneratedExternalCodes } from "@/lib/code-gen";
 
 // GET /api/batches — 获取批次列表
 export async function GET(req: NextRequest) {
   try {
+    await initDb();
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
@@ -90,6 +92,7 @@ export async function GET(req: NextRequest) {
 // POST /api/batches — 提交运单
 export async function POST(req: NextRequest) {
   try {
+    await initDb();
     const body = await req.json();
     const { fileName, ruleId, waybills } = body;
 
@@ -105,40 +108,61 @@ export async function POST(req: NextRequest) {
       [batchId, fileName, ruleId]
     );
 
-    // 创建运单和物品
-    for (const wb of waybills) {
+    // 缺少运单号时，自动生成基于日期的自增编号（如 WD-20260706-0001）
+    await assignGeneratedExternalCodes(waybills);
+
+    // 创建运单和物品 — 使用批量插入提高性能
+    const waybillValues: string[] = [];
+    const waybillParams: any[] = [];
+    const itemValues: string[] = [];
+    const itemParams: any[] = [];
+
+    for (let i = 0; i < waybills.length; i++) {
+      const wb = waybills[i];
       const waybillId = uid("wb");
-      await query(
-        `INSERT INTO waybills (id, external_code, store_name, receiver_name, receiver_phone, receiver_address, remark, batch_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          waybillId,
-          wb.external_code || null,
-          wb.store_name || null,
-          wb.receiver_name || null,
-          wb.receiver_phone || null,
-          wb.receiver_address || null,
-          wb.remark || null,
-          batchId,
-        ]
+      const base = i * 8;
+      waybillValues.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`);
+      waybillParams.push(
+        waybillId,
+        wb.external_code || null,
+        wb.store_name || null,
+        wb.receiver_name || null,
+        wb.receiver_phone || null,
+        wb.receiver_address || null,
+        wb.remark || null,
+        batchId
       );
 
       if (wb.items && Array.isArray(wb.items)) {
         for (const item of wb.items) {
-          await query(
-            `INSERT INTO order_items (id, waybill_id, sku_code, sku_name, quantity, spec)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-              uid("item"),
-              waybillId,
-              item.sku_code || "",
-              item.sku_name || "",
-              item.quantity || 0,
-              item.spec || null,
-            ]
+          const bi = itemParams.length;
+          itemValues.push(`($${bi + 1}, $${bi + 2}, $${bi + 3}, $${bi + 4}, $${bi + 5}, $${bi + 6})`);
+          itemParams.push(
+            uid("item"),
+            waybillId,
+            item.sku_code || "",
+            item.sku_name || "",
+            item.quantity || 0,
+            item.spec || null,
           );
         }
       }
+    }
+
+    // 批量插入运单
+    if (waybillValues.length > 0) {
+      await query(
+        `INSERT INTO waybills (id, external_code, store_name, receiver_name, receiver_phone, receiver_address, remark, batch_id) VALUES ${waybillValues.join(", ")}`,
+        waybillParams
+      );
+    }
+
+    // 批量插入物品
+    if (itemValues.length > 0) {
+      await query(
+        `INSERT INTO order_items (id, waybill_id, sku_code, sku_name, quantity, spec) VALUES ${itemValues.join(", ")}`,
+        itemParams
+      );
     }
 
     return NextResponse.json({

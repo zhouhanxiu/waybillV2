@@ -52,7 +52,16 @@ function resolveField(
     // 尝试直接使用属性名
     return row[String(value)] ?? null;
   }
-  if (source === "row_label") return value; // 行标签值直接使用
+  if (source === "row_label" && typeof value === "string") {
+    // 从当前行文本中按标签提取值，例如"收货机构 海口店"提取"海口店"
+    const fullText = context.allRows[context.rowIndex]?.map(s).join(" ") || "";
+    const idx = fullText.indexOf(value);
+    if (idx >= 0) {
+      const after = fullText.slice(idx + value.length).replace(/^[：:\s]+/, "").trim();
+      return after.split(/\s{2,}|\s+/).filter(Boolean)[0] ?? "";
+    }
+    return value;
+  }
   if (source === "regex" && typeof value === "string") {
     // 尝试从整行文本中正则提取
     const fullText = context.allRows[context.rowIndex]?.map(s).join(" ") || "";
@@ -81,7 +90,8 @@ function splitComposite(raw: string, pattern: string, separator: string): { name
 
 export function parseRows(
   rawRows: any[][],
-  rule: ParseRule
+  rule: ParseRule,
+  sheetName?: string
 ): { rows: ParsedRow[]; warnings: string[] } {
   const cfg = rule.config;
   const structure = cfg.structure;
@@ -89,8 +99,21 @@ export function parseRows(
   const warnings: string[] = [];
   const rows: ParsedRow[] = [];
 
-  const dataStart = (structure.dataStartRow ?? 1) - 1; // 转为 0-based
-  const headerIdx = (structure.titleRow ?? dataStart) - 1;
+  let dataStart = (structure.dataStartRow ?? 1) - 1; // 转为 0-based
+  let headerIdx = (structure.titleRow ?? dataStart) - 1;
+
+  // 卡片模式下，如果配置了表格开始标志，在卡片内自动定位表格表头
+  if (rule.config.engine === "card" && cfg.card?.tableStartMarker) {
+    const marker = cfg.card.tableStartMarker;
+    for (let i = 0; i < rawRows.length; i++) {
+      const text = rawRows[i]?.map(s).join(" ") || "";
+      if (text.includes(marker)) {
+        headerIdx = i;
+        dataStart = i + 1;
+        break;
+      }
+    }
+  }
 
   // 构建表头
   const headers = rawRows[headerIdx]?.map((h: any) => s(h)) || [];
@@ -118,7 +141,7 @@ export function parseRows(
     });
 
     const row: ParsedRow = {};
-    const ctx = { rowIndex: i, allRows: rawRows, headers, sheetName: undefined };
+    const ctx = { rowIndex: i, allRows: rawRows, headers, sheetName };
 
     // 复合拆分处理
     if (cfg.compositeSplit?.enabled) {
@@ -154,12 +177,26 @@ export function parseRows(
       (row as any)[m.target] = applyTransform(s(val), m.transform);
     }
 
+    // 跳过完全没有字段值的行（常见于 PDF 页眉/页脚/元信息单行）
+    const hasAnyField = mappings.some((m) => {
+      const v = (row as any)[m.target];
+      return v != null && s(v) !== "";
+    });
+    if (!hasAnyField) continue;
+
     rows.push(row);
   }
 
+
   // 矩阵转置处理
   if (cfg.matrixTranspose?.enabled) {
-    return applyMatrixTranspose(rawRows, rule, warnings);
+    const mtResult = applyMatrixTranspose(rawRows, rule, warnings);
+    // 如果矩阵转置失败（如找不到 SKU 名称列），回退到普通行解析
+    if (mtResult.rows.length === 0) {
+      warnings.push("矩阵转置未找到 SKU 列，已回退到普通行解析");
+    } else {
+      return mtResult;
+    }
   }
 
   // 尾部信息提取
@@ -194,11 +231,22 @@ function applyMatrixTranspose(
   let skuNameColIdx = -1;
   if (typeof mt.skuNameColumn === "number") {
     skuNameColIdx = mt.skuNameColumn;
-  } else {
+  } else if (typeof mt.skuNameColumn === "string") {
+    // 精确匹配
     skuNameColIdx = headers.indexOf(mt.skuNameColumn);
+    // 模糊匹配：去掉空格后比较
+    if (skuNameColIdx < 0) {
+      const search = mt.skuNameColumn.replace(/\s+/g, "");
+      skuNameColIdx = headers.findIndex((h) => h.replace(/\s+/g, "") === search);
+    }
+    // 部分匹配
+    if (skuNameColIdx < 0) {
+      const searchLower = mt.skuNameColumn.toLowerCase().replace(/\s+/g, "");
+      skuNameColIdx = headers.findIndex((h) => h.toLowerCase().replace(/\s+/g, "").includes(searchLower));
+    }
   }
   if (skuNameColIdx < 0) {
-    warnings.push("矩阵转置：未找到 SKU 名称列");
+    warnings.push(`矩阵转置：未找到 SKU 名称列 "${mt.skuNameColumn}"，表头: ${headers.slice(0, 10).join(", ")}`);
     return { rows: [], warnings };
   }
 
@@ -207,18 +255,46 @@ function applyMatrixTranspose(
   if (mt.specColumn) {
     if (typeof mt.specColumn === "number") {
       specColIdx = mt.specColumn;
-    } else {
+    } else if (typeof mt.specColumn === "string") {
       specColIdx = headers.indexOf(mt.specColumn);
+      if (specColIdx < 0) {
+        const search = mt.specColumn.replace(/\s+/g, "");
+        specColIdx = headers.findIndex((h) => h.replace(/\s+/g, "") === search);
+      }
     }
   }
 
-  // 门店列（排除 SKU 名和规格列）
+  // 门店列（排除 SKU 名、规格列以及常见元数据列）
+  const metadataHeaders = ["仓库", "货主", "条码", "编码", "状态", "单位", "在库", "可用", "待移入", "分配", "冻结", "总", "合计", "库存", "sku", "商品", "名称", "规格", "外部", "结余", "剩余", "下单后", "下单前", "电子名单", "余额", "已下单", "未下单"];
   const storeCols: { colIdx: number; storeName: string }[] = [];
   for (let c = 0; c < headers.length; c++) {
     if (c === skuNameColIdx || c === specColIdx) continue;
-    if (s(headers[c]) !== "") {
-      storeCols.push({ colIdx: c, storeName: s(headers[c]) });
+    const h = s(headers[c]);
+    if (!h) continue;
+    const lowerH = h.toLowerCase();
+    if (metadataHeaders.some((m) => lowerH.includes(m))) continue;
+    storeCols.push({ colIdx: c, storeName: h });
+  }
+
+  // 从 fieldMappings 找 sku_code、warehouse、owner 列索引
+  let skuCodeColIdx = -1;
+  let warehouseColIdx = -1;
+  let ownerColIdx = -1;
+  for (const m of cfg.fieldMappings || []) {
+    if (m.source !== "column") continue;
+    let idx = -1;
+    if (typeof m.value === "number") {
+      idx = m.value;
+    } else if (typeof m.value === "string") {
+      idx = headers.indexOf(m.value);
+      if (idx < 0) {
+        const search = m.value.replace(/\s+/g, "");
+        idx = headers.findIndex((h) => h.replace(/\s+/g, "").includes(search));
+      }
     }
+    if (m.target === "sku_code") skuCodeColIdx = idx;
+    if (m.target === "warehouse") warehouseColIdx = idx;
+    if (m.target === "owner") ownerColIdx = idx;
   }
 
   const rows: ParsedRow[] = [];
@@ -227,7 +303,10 @@ function applyMatrixTranspose(
     if (!rawRow || rawRow.every((c: any) => s(c) === "")) continue;
 
     const skuName = s(rawRow[skuNameColIdx]);
+    const skuCode = skuCodeColIdx >= 0 ? s(rawRow[skuCodeColIdx]) : undefined;
     const spec = specColIdx >= 0 ? s(rawRow[specColIdx]) : undefined;
+    const warehouse = warehouseColIdx >= 0 ? s(rawRow[warehouseColIdx]) : undefined;
+    const owner = ownerColIdx >= 0 ? s(rawRow[ownerColIdx]) : undefined;
 
     for (const { colIdx, storeName } of storeCols) {
       const qtyRaw = s(rawRow[colIdx]);
@@ -235,9 +314,12 @@ function applyMatrixTranspose(
 
       rows.push({
         store_name: storeName,
+        sku_code: skuCode,
         sku_name: skuName,
         spec,
         quantity: parseFloat(qtyRaw) || 0,
+        ...(warehouse ? { warehouse } : {}),
+        ...(owner ? { owner } : {}),
       });
     }
   }
@@ -275,19 +357,49 @@ function applyTrailingInfo(
   for (let i = start; i < end && i < rawRows.length; i++) {
     const rawRow = rawRows[i];
     if (!rawRow) continue;
-    const ctx = { rowIndex: i, allRows: rawRows, headers: [], sheetName: undefined };
+    // PDF 单列行：直接取第一列作为行文本；多列行：用空格连接
+    const rowText = rawRow.length === 1 ? s(rawRow[0]) : rawRow.map(s).join(" ");
+    if (!rowText) continue;
 
     for (const m of tiMappings) {
-      const val = resolveField({}, m, ctx);
-      if (val != null && s(val) !== "") {
-        trailingData[m.target] = applyTransform(s(val), m.transform);
+      // 如果已经有值，跳过
+      if (trailingData[m.target] != null) continue;
+
+      if (m.source === "regex" && typeof m.value === "string") {
+        const re = new RegExp(m.value);
+        const match = rowText.match(re);
+        if (match) {
+          const val = match[1] || match[0];
+          if (val) {
+            trailingData[m.target] = applyTransform(s(val), m.transform);
+          }
+        }
+      } else if (m.source === "row_label" && typeof m.value === "string") {
+        const label = m.value;
+        const idx = rowText.indexOf(label);
+        if (idx >= 0) {
+          const val = rowText.slice(idx + label.length).replace(/^[：:\s]+/, "").trim();
+          if (val) {
+            trailingData[m.target] = applyTransform(val, m.transform);
+          }
+        }
+      } else if (m.source === "column") {
+        const idx = typeof m.value === "number" ? m.value : -1;
+        if (idx >= 0 && idx < rawRow.length) {
+          const val = s(rawRow[idx]);
+          if (val) {
+            trailingData[m.target] = applyTransform(val, m.transform);
+          }
+        }
+      } else if (m.source === "static") {
+        trailingData[m.target] = m.value;
       }
     }
   }
 
-  // 合并到尾部的行（通常是最后一行的收货人信息）
+  // 合并到尾部的行
   if (Object.keys(trailingData).length > 0 && rows.length > 0) {
-    // 将尾部信息合并到每一行（通常是公共收货信息）
+    // 将尾部信息合并到每一行（公共收货信息/单号）
     for (const row of rows) {
       for (const [key, val] of Object.entries(trailingData)) {
         if (val != null && !(row as any)[key]) {
@@ -308,18 +420,27 @@ function applyAggregation(
   const keyField = rule.config.aggregation?.keyField || "external_code";
 
   const groups = new Map<string, { waybill: ParsedRow; items: ParsedRow[] }>();
+  let missingKeyCount = 0;
 
   for (const row of rows) {
-    const key = s(row[keyField] || "");
+    let key = s(row[keyField] || "");
+    let keySource: string = keyField;
+    // 如果缺少外部编码，先尝试用门店兜底；再没有则生成行号，避免数据丢失
     if (!key) {
-      warnings.push(`聚合：行缺少关键字段 ${keyField}，跳过`);
-      continue;
+      key = s(row.store_name || "");
+      keySource = "store_name";
+      if (!key) {
+        key = `_unknown_${Math.random().toString(36).slice(2, 6)}`;
+        keySource = "unknown";
+      }
+      missingKeyCount++;
     }
 
     if (!groups.has(key)) {
       groups.set(key, {
         waybill: {
-          external_code: key,
+          // 只有真正从 external_code 取到值时才写入 external_code，避免把 SKU 编码/门店写进去
+          external_code: keySource === keyField ? row.external_code : undefined,
           store_name: row.store_name,
           receiver_name: row.receiver_name,
           receiver_phone: row.receiver_phone,
@@ -343,6 +464,12 @@ function applyAggregation(
       quantity: row.quantity,
       spec: row.spec,
     });
+  }
+
+  if (missingKeyCount > 0) {
+    warnings.push(
+      `聚合：${missingKeyCount} 行缺少 ${keyField}，已使用门店/默认行号兜底，请检查是否需要补录单号`
+    );
   }
 
   // 展平：每行保留运单信息 + 一个 SKU（提交时在 API 层聚合）
@@ -390,23 +517,137 @@ export function splitCards(
 
 export function parseFile(
   rawRows: any[][],
-  rule: ParseRule
+  rule: ParseRule,
+  sheetName?: string
 ): { rows: ParsedRow[]; warnings: string[] } {
-  const cards = splitCards(rawRows, rule);
+  const engine = rule.config.engine || "row";
+  const cfg = rule.config;
+  const structure = cfg.structure;
 
-  if (cards.length > 1) {
-    // 卡片模式：每张卡片单独解析
+  // 矩阵引擎：直接转置，然后应用 trailingInfo（如果有的话）
+  if (engine === "matrix") {
+    const { rows, warnings } = applyMatrixTranspose(rawRows, rule, []);
+    // 矩阵转置后也应用尾部信息提取（如收货人/单号等）
+    if (cfg.trailingInfo?.enabled && structure.trailingInfoStart != null) {
+      applyTrailingInfo(rawRows, rule, rows, warnings);
+    }
+    // 应用聚合（如果启用）
+    if (cfg.aggregation?.enabled) {
+      return applyAggregation(rows, rule, warnings);
+    }
+    return { rows, warnings };
+  }
+
+  // 卡片引擎：拆分卡片并提取头部
+  if (engine === "card") {
+    const cards = splitCards(rawRows, rule);
     const allRows: ParsedRow[] = [];
     const allWarnings: string[] = [];
 
+    // 先尝试从整个文件提取公共单号，让所有卡片共享
+    const fullHeader = extractCardHeader(rawRows, rule);
+
     for (const card of cards) {
-      const result = parseRows(card, rule);
+      const header = extractCardHeader(card, rule);
+      const result = parseRows(card, rule, sheetName);
+      for (const row of result.rows) {
+        Object.assign(row, fullHeader, header);
+      }
       allRows.push(...result.rows);
       allWarnings.push(...result.warnings);
     }
 
+    // 如果启用了聚合，在整个文件维度再聚合一次（跨卡片）
+    if (rule.config.aggregation?.enabled) {
+      return applyAggregation(allRows, rule, allWarnings);
+    }
     return { rows: allRows, warnings: allWarnings };
   }
 
-  return parseRows(rawRows, rule);
+  // 行引擎：尝试卡片拆分兜底，然后普通行解析
+  const cards = splitCards(rawRows, rule);
+  if (cards.length > 1) {
+    const allRows: ParsedRow[] = [];
+    const allWarnings: string[] = [];
+    for (const card of cards) {
+      const result = parseRows(card, rule, sheetName);
+      allRows.push(...result.rows);
+      allWarnings.push(...result.warnings);
+    }
+    return { rows: allRows, warnings: allWarnings };
+  }
+
+  return parseRows(rawRows, rule, sheetName);
+}
+
+// ──── 卡片头部信息提取 ────────────────────────────────────────────────
+
+function extractCardHeader(cardRows: any[][], rule: ParseRule): Partial<ParsedRow> {
+  const header = rule.config.card?.headerMappings;
+  if (!header || header.length === 0) return {};
+
+  const result: Partial<ParsedRow> = {};
+  const fullText = cardRows.map((r) => r.map(s).join(" ")).join("\n");
+
+  // 收集所有 row_label 标签，用于截断取值
+  const allLabels = header
+    .filter((m) => m.source === "row_label" && typeof m.value === "string")
+    .map((m) => String(m.value));
+
+  for (const m of header) {
+    if (m.source === "static") {
+      (result as any)[m.target] = m.value;
+      continue;
+    }
+
+    // regex 来源：优先在当前卡片行中匹配，匹配不到则在整个卡片文本中匹配
+    if (m.source === "regex" && typeof m.value === "string") {
+      const re = new RegExp(m.value);
+      let found = false;
+      for (const row of cardRows) {
+        const rowText = row.map(s).join(" ");
+        const match = rowText.match(re);
+        if (match) {
+          (result as any)[m.target] = applyTransform(match[1] || match[0], m.transform);
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        const match = fullText.match(re);
+        if (match) {
+          (result as any)[m.target] = applyTransform(match[1] || match[0], m.transform);
+        }
+      }
+      continue;
+    }
+
+    // row_label 来源：按行匹配
+    if (m.source === "row_label") {
+      for (const row of cardRows) {
+        const rowText = row.map(s).join(" ");
+        const label = String(m.value);
+        const idx = rowText.indexOf(label);
+        if (idx >= 0) {
+          let rest = rowText.slice(idx + label.length).replace(/^[：:\s]+/, "").trim();
+          // 按下一个标签截断，避免把同行动态列内容也抓进来
+          const nextLabelPos = allLabels
+            .filter((l) => l !== label)
+            .map((l) => rest.indexOf(l))
+            .filter((p) => p > 0)
+            .sort((a, b) => a - b)[0];
+          if (nextLabelPos != null) {
+            rest = rest.slice(0, nextLabelPos).trim();
+          }
+          if (rest) {
+            (result as any)[m.target] = applyTransform(rest, m.transform);
+            break;
+          }
+        }
+      }
+      continue;
+    }
+  }
+
+  return result;
 }

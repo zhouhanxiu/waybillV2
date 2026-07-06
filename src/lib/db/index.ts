@@ -12,6 +12,7 @@ function sanitizeUrl(raw: string): string {
 }
 
 let sql: ReturnType<typeof postgres> | null = null;
+let dbInitialized = false;
 
 export function getDb() {
   const raw = process.env.DATABASE_URL;
@@ -34,15 +35,31 @@ export async function query<T = any>(sqlText: string, params?: any[]) {
 }
 
 export async function initDb() {
+  if (dbInitialized) return;
+
   await query(`
     CREATE TABLE IF NOT EXISTS import_rules (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      description TEXT,
       file_type TEXT NOT NULL,
       config JSONB NOT NULL,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     );
+  `);
+  // 兼容旧表：如果 description 列不存在则添加
+  await query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='import_rules' AND column_name='description'
+      ) THEN
+        ALTER TABLE import_rules ADD COLUMN description TEXT;
+      END IF;
+    END
+    $$;
   `);
   await query(`
     CREATE TABLE IF NOT EXISTS import_batches (
@@ -82,4 +99,6 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_waybills_external ON waybills(external_code);
     CREATE INDEX IF NOT EXISTS idx_order_items_waybill ON order_items(waybill_id);
   `);
+
+  dbInitialized = true;
 }
