@@ -21,7 +21,7 @@ export function getDb() {
   if (!sql) {
     sql = postgres(url, {
       prepare: false,
-      max: 10,
+      max: 3,          // 降低连接数减少内存
       idle_timeout: 20,
       connect_timeout: 10,
     });

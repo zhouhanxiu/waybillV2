@@ -9,6 +9,13 @@ const nextConfig: NextConfig = {
     "ai",
     "xlsx",
   ],
+  // 减少 Turbopack 文件监听范围，降低内存
+  outputFileTracingExcludes: {
+    "*": [
+      "node_modules/.pnpm/**",
+      ".next/**",
+    ],
+  },
 };
 
 export default nextConfig;
