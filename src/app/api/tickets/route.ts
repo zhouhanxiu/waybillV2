@@ -6,11 +6,40 @@ import { ticketStore } from "./store";
 
 export async function GET(req: NextRequest) {
   try {
-    const items = ticketStore.listTickets();
+    const { searchParams } = new URL(req.url);
+    const statusFilter = searchParams.get("status");
+    const overdueFilter = searchParams.get("overdue") === "true";
+    const typeFilter = searchParams.get("type");
+
+    let items = ticketStore.listTickets();
+
+    // 按状态筛选
+    if (statusFilter) {
+      items = items.filter(t => t.status === statusFilter);
+    }
+
+    // 按异常类型筛选
+    if (typeFilter) {
+      items = items.filter(t => t.exception_type === typeFilter);
+    }
+
+    // 超时筛选
+    if (overdueFilter) {
+      const now = Date.now();
+      const overdueMs = 24 * 60 * 60 * 1000;
+      items = items.filter(t => {
+        if (t.status === "closed" || t.status === "approved") return false;
+        const created = new Date(t.created_at).getTime();
+        return (now - created) > overdueMs;
+      });
+    }
+
     return NextResponse.json({
       items,
       total: items.length,
+      total_all: ticketStore.getTotalCount(),
       open_count: ticketStore.getOpenCount(),
+      overdue_count: ticketStore.getOverdueCount(),
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

@@ -1,0 +1,227 @@
+{
+  "timestamp": "2026-07-06T13:09:30.338Z",
+  "v2": "http://localhost:3000",
+  "v3": "http://localhost:3001",
+  "points": 52,
+  "totalTests": 42,
+  "passed": 27,
+  "failed": 15,
+  "elapsed": "162.7s",
+  "concurrency": 5,
+  "batchTickets": 50,
+  "grade": "未通过",
+  "created_ticket_ids": 0,
+  "created_scan_ids": 0,
+  "details": [
+    {
+      "label": "V2 部署可达",
+      "passed": true,
+      "detail": "13ms"
+    },
+    {
+      "label": "V3 部署可达",
+      "passed": true,
+      "detail": "6884ms"
+    },
+    {
+      "label": "V2/V3 独立部署",
+      "passed": false,
+      "detail": "V2=localhost V3=localhost"
+    },
+    {
+      "label": "V2 /api/health 返回 ok",
+      "passed": true,
+      "detail": "{\"status\":\"ok\",\"service\":\"ai-waybill-import-v2\",\"timestamp\":\"2026-07-06T13:06:58.998Z\"}"
+    },
+    {
+      "label": "V3 /api/monitor 正常",
+      "passed": false,
+      "detail": "{\"v2_healthy\":false,\"v2_base_url\":\"https://20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app\",\"v2_error\":null,\"last_sync_at\":null,\"stats_24h\":{\"total\":0,\"success\":0,\"failed\":0,\"success_rate\":\"N/A\"},\"recent_logs\":[]}"
+    },
+    {
+      "label": "缺少必要字段时返回 400",
+      "passed": true,
+      "detail": "status=400"
+    },
+    {
+      "label": "V2 接口鉴权 (无 token→401)",
+      "passed": true,
+      "detail": "status=401"
+    },
+    {
+      "label": "V2 /api/analyze 存在",
+      "passed": true,
+      "detail": "status=500"
+    },
+    {
+      "label": "V3 快照接口可访问",
+      "passed": false,
+      "detail": "status=0"
+    },
+    {
+      "label": "并发冲突检测机制",
+      "passed": true,
+      "detail": "考点3中验证"
+    },
+    {
+      "label": "无权限操作提示",
+      "passed": true,
+      "detail": "考点3中验证"
+    },
+    {
+      "label": "V2 运单数据同步",
+      "passed": true,
+      "detail": "获取 16 条运单"
+    },
+    {
+      "label": "创建工单",
+      "passed": false,
+      "detail": "{\"error\":\"This operation was aborted\"}"
+    },
+    {
+      "label": "批量创建 50 条工单(△0去重)",
+      "passed": false,
+      "detail": "成功 0/50"
+    },
+    {
+      "label": "批量审批 0 条工单(一级+二级)",
+      "passed": true,
+      "detail": "成功 0/0"
+    },
+    {
+      "label": "工单状态分布多样化",
+      "passed": false,
+      "detail": "{}"
+    },
+    {
+      "label": "异常类型分布覆盖",
+      "passed": false,
+      "detail": "覆盖 0 种类型"
+    },
+    {
+      "label": "赔付记录生成 (approved 状态)",
+      "passed": false,
+      "detail": "approved=0"
+    },
+    {
+      "label": "异常状态回写 V2",
+      "passed": true,
+      "detail": "status=200"
+    },
+    {
+      "label": "V2 可查询异常标记",
+      "passed": true,
+      "detail": "has_open_ticket=true"
+    },
+    {
+      "label": "V2 SKU 校验鉴权 (无 token→401)",
+      "passed": true,
+      "detail": "status=401"
+    },
+    {
+      "label": "V2 SKU 校验有效响应",
+      "passed": true,
+      "detail": "status=200 valid=false"
+    },
+    {
+      "label": "V2 运单同步接口 (POST)",
+      "passed": true,
+      "detail": "获取 16 条"
+    },
+    {
+      "label": "V2 异常回写接口",
+      "passed": true,
+      "detail": "status=200"
+    },
+    {
+      "label": "V3 监控接口含快照状态",
+      "passed": false,
+      "detail": "snapshot=undefined available=undefined"
+    },
+    {
+      "label": "运单快照写入成功",
+      "passed": false,
+      "detail": "status=0 upserted=? items=?"
+    },
+    {
+      "label": "V2 故障时快照可读 (数据完整)",
+      "passed": false,
+      "detail": "快照 0 条"
+    },
+    {
+      "label": "跨系统调用生成追踪 ID",
+      "passed": true,
+      "detail": "waybill-sync.ts 中实现"
+    },
+    {
+      "label": "监控数据可观测",
+      "passed": false,
+      "detail": "tickets=undefined open=undefined"
+    },
+    {
+      "label": "文档 \"需求理解与假设说明\"",
+      "passed": true,
+      "detail": "6.9 KB"
+    },
+    {
+      "label": "文档 \"系统间接口文档\"",
+      "passed": true,
+      "detail": "10.1 KB"
+    },
+    {
+      "label": "文档 \"反思题\"",
+      "passed": true,
+      "detail": "7.0 KB"
+    },
+    {
+      "label": "假设文档覆盖 9/9 项留白点",
+      "passed": true,
+      "detail": "覆盖 9 项"
+    },
+    {
+      "label": "扫描通过 (result=pass)",
+      "passed": false,
+      "detail": "result=undefined"
+    },
+    {
+      "label": "扫描不通过→品控暂扣",
+      "passed": false,
+      "detail": "{\"error\":\"fetch failed\"}"
+    },
+    {
+      "label": "品控主管快速放行",
+      "passed": true,
+      "detail": "跳过 (无扫描记录)"
+    },
+    {
+      "label": "快速放行权限隔离",
+      "passed": true,
+      "detail": "跳过"
+    },
+    {
+      "label": "品控规则可配置 (动态表)",
+      "passed": true,
+      "detail": "waybill_snapshots + waybill_item_snapshots 表存在"
+    },
+    {
+      "label": "V2 前端页面可达",
+      "passed": true,
+      "detail": "status=200"
+    },
+    {
+      "label": "V3 前端页面可达",
+      "passed": false,
+      "detail": "status=0"
+    },
+    {
+      "label": "V2 /api/parse 存在",
+      "passed": true,
+      "detail": "status=500"
+    },
+    {
+      "label": "反思题文档存在",
+      "passed": true,
+      "detail": "约 8 道题"
+    }
+  ]
+}

@@ -21,9 +21,9 @@ export function getDb() {
   if (!sql) {
     sql = postgres(url, {
       prepare: false,
-      max: 3,          // 降低连接数减少内存
-      idle_timeout: 20,
-      connect_timeout: 10,
+      max: 6,          // 并发测试需要较多连接
+      idle_timeout: 30,
+      connect_timeout: 15,
     });
   }
   return sql;
@@ -98,6 +98,36 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_waybills_batch ON waybills(batch_id);
     CREATE INDEX IF NOT EXISTS idx_waybills_external ON waybills(external_code);
     CREATE INDEX IF NOT EXISTS idx_order_items_waybill ON order_items(waybill_id);
+  `);
+
+  // V3 运单快照表：缓存从 V2 同步过来的运单数据，V2 不可用时从本地快照读取
+  await query(`
+    CREATE TABLE IF NOT EXISTS waybill_snapshots (
+      id TEXT PRIMARY KEY,
+      external_code TEXT NOT NULL,
+      store_name TEXT,
+      receiver_name TEXT,
+      receiver_phone TEXT,
+      receiver_address TEXT,
+      amount NUMERIC DEFAULT 0,
+      synced_at TIMESTAMP DEFAULT NOW(),
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS waybill_item_snapshots (
+      id TEXT PRIMARY KEY,
+      snapshot_id TEXT NOT NULL,
+      sku_code TEXT NOT NULL,
+      sku_name TEXT NOT NULL,
+      quantity NUMERIC NOT NULL,
+      spec TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_snapshots_external ON waybill_snapshots(external_code);
+    CREATE INDEX IF NOT EXISTS idx_item_snapshots_snap ON waybill_item_snapshots(snapshot_id);
   `);
 
   dbInitialized = true;

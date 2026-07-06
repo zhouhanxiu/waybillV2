@@ -71,11 +71,11 @@ export const ticketStore = {
     const now = new Date().toISOString();
     const status: TicketStatus = data.amount > 500 ? "level2" : "pending";
 
-    // 检查重复
+    // 检查重复：同运单+同异常类型+未完结 → 去重
     const existing = tickets.find(t =>
       t.external_code === data.external_code &&
       t.exception_type === data.exception_type &&
-      (t.status === "pending" || t.status === "level1" || t.status === "level2")
+      t.status !== "closed" && t.status !== "approved"
     );
     if (existing) {
       return { ...existing, existing_ticket: true };
@@ -110,6 +110,16 @@ export const ticketStore = {
 
   getTotalCount() { return tickets.length; },
   getOpenCount() { return tickets.filter(t => t.status !== "closed").length; },
+  getOverdueCount() {
+    // 超过 24 小时未处理的工单视为超时
+    const now = Date.now();
+    const overdueMs = 24 * 60 * 60 * 1000;
+    return tickets.filter(t => {
+      if (t.status === "closed" || t.status === "approved") return false;
+      const created = new Date(t.created_at).getTime();
+      return (now - created) > overdueMs;
+    }).length;
+  },
 
   // ── 审批 ──
   approve(params: { id: string; action: "approve" | "reject"; approver: string; level?: number; opinion: string }) {
@@ -121,9 +131,9 @@ export const ticketStore = {
       return { error: "上报人不能审批自己的工单", status: 403 };
     }
 
-    // 已关闭/已审批的不能重复操作
+    // 已关闭/已审批的不能重复操作（幂等保护）
     if (ticket.status === "approved" || ticket.status === "closed") {
-      return { error: "工单已完结，不可重复审批", status: 409 };
+      return { error: "工单已完结，不可重复审批", status: 409, ticket };
     }
 
     // 幂等：检查是否已审批过
