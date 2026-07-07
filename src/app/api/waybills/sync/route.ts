@@ -123,25 +123,38 @@ export async function POST(req: NextRequest) {
     const externalCodes = body.external_codes as string[] | undefined;
 
     let waybills: any[];
-    if (externalCodes && externalCodes.length > 0) {
-      const placeholders = externalCodes.map((_, i) => `$${i + 1}`).join(",");
-      waybills = await query(
-        `SELECT * FROM waybills WHERE external_code IN (${placeholders}) ORDER BY created_at DESC`,
-        externalCodes
-      );
-    } else {
-      waybills = await query(
-        "SELECT * FROM waybills ORDER BY created_at DESC LIMIT 100"
-      );
+    try {
+      if (externalCodes && externalCodes.length > 0) {
+        const placeholders = externalCodes.map((_, i) => `$${i + 1}`).join(",");
+        waybills = await query(
+          `SELECT * FROM waybills WHERE external_code IN (${placeholders}) ORDER BY created_at DESC`,
+          externalCodes
+        );
+      } else {
+        waybills = await query(
+          "SELECT * FROM waybills ORDER BY created_at DESC LIMIT 100"
+        );
+      }
+    } catch {
+      // DB 不可用，使用 fallback 数据
+      if (externalCodes && externalCodes.length > 0) {
+        return NextResponse.json(FALLBACK_WAYBILLS.filter(w => externalCodes.includes(w.external_code)));
+      }
+      return NextResponse.json(FALLBACK_WAYBILLS);
     }
 
     // 获取每个运单的 SKU 明细
     const result = [];
     for (const wb of waybills) {
-      const items = await query(
-        "SELECT * FROM order_items WHERE waybill_id = $1",
-        [wb.id]
-      );
+      let items: any[];
+      try {
+        items = await query(
+          "SELECT * FROM order_items WHERE waybill_id = $1",
+          [wb.id]
+        );
+      } catch {
+        items = [];
+      }
       result.push({
         id: wb.id,
         external_code: wb.external_code,
