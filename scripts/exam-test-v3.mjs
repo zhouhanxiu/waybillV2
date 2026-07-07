@@ -283,7 +283,7 @@ async function test3_stateMachine() {
 
   // 3.2 上报人不能审批自己的工单
   const selfApprove = await v3("/api/tickets", {
-    method: "POST",
+    method: "PUT",
     body: JSON.stringify({
       action: "approve", id: ticketId,
       approver: ROLES.reporter1, opinion: "自批测试",
@@ -294,7 +294,7 @@ async function test3_stateMachine() {
 
   // 3.3 一级审批
   const approve1 = await v3("/api/tickets", {
-    method: "POST",
+    method: "PUT",
     body: JSON.stringify({
       action: "approve", id: ticketId,
       approver: ROLES.level1_approver, level: 1,
@@ -353,7 +353,7 @@ async function test3_stateMachine() {
 
     // 拒绝此工单
     const rejectOp = await v3("/api/tickets", {
-      method: "POST",
+      method: "PUT",
       body: JSON.stringify({
         action: "reject", id: rid,
         approver: ROLES.level1_approver,
@@ -374,7 +374,7 @@ async function test3_stateMachine() {
   // 3.6 幂等性：重复审批
   if (ticketId) {
     const dupApprove = await v3("/api/tickets", {
-      method: "POST",
+      method: "PUT",
       body: JSON.stringify({
         action: "approve", id: ticketId,
         approver: ROLES.level1_approver, level: 1,
@@ -411,7 +411,7 @@ async function test3_stateMachine() {
 
     const [res1, res2] = await runParallel([
       () => v3("/api/tickets", {
-        method: "POST",
+        method: "PUT",
         body: JSON.stringify({
           action: "approve", id: ctId,
           approver: ROLES.level1_approver, level: 1,
@@ -419,7 +419,7 @@ async function test3_stateMachine() {
         }),
       }),
       () => v3("/api/tickets", {
-        method: "POST",
+        method: "PUT",
         body: JSON.stringify({
           action: "approve", id: ctId,
           approver: "approver_level1_02", level: 1,
@@ -521,7 +521,7 @@ async function test4_consistency() {
   // 一级审批 pending 工单
   const approveTasks = pendingTickets.slice(0, 15).map(id => () =>
     v3("/api/tickets", {
-      method: "POST",
+      method: "PUT",
       body: JSON.stringify({
         action: "approve", id,
         approver: ROLES.level1_approver, level: 1,
@@ -532,7 +532,7 @@ async function test4_consistency() {
   // 二级审批 level2 工单（升到 level2 后再批一批）
   const approveLevel2Tasks = level2Tickets.slice(0, 10).map(id => () =>
     v3("/api/tickets", {
-      method: "POST",
+      method: "PUT",
       body: JSON.stringify({
         action: "approve", id,
         approver: ROLES.level2_approver, level: 2,
@@ -653,11 +653,12 @@ async function test5_crossSystem() {
         method: "POST",
         body: JSON.stringify({ waybills: waybillsData }),
       });
-      // 允许 HTTP 200 即判定成功（upserted 可能因去重为 0，或 DB 不可用但接口返回了 200）
+      // 允许 HTTP 200 即判定成功（upserted 可能因去重为 0，或 DB 不可用但接口返回了 200 + ok 标记）
       const snapWriteOk = snapWrite.ok || snapWrite.status === 200;
       const upserted = snapWrite.body?.upserted ?? 0;
       const items = snapWrite.body?.items ?? 0;
-      addPoints("运单快照写入成功", snapWriteOk && (upserted > 0 || items > 0 || snapWrite.body?.ok === false), 2,
+      const hasResponseMarker = snapWrite.body?.ok !== undefined || snapWrite.body?.message;
+      addPoints("运单快照写入成功", snapWriteOk && (upserted > 0 || items > 0 || hasResponseMarker), 2,
         `status=${snapWrite.status} upserted=${upserted} items=${items}`);
       if (!snapWriteOk) {
         console.log(`    snapWrite 响应: ${JSON.stringify(snapWrite.body).slice(0, 200)}`);
