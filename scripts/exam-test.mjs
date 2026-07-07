@@ -6,7 +6,7 @@
  * 需要 V2 和 V3 均已在 Vercel 部署可访问
  */
 
-const V2 = "https://20260704155001.vercel.app";
+const V2 = "https://20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app";
 const V3 = "https://20260704155001-v3.vercel.app";
 const INTERNAL_KEY = "v3-internal-key";
 

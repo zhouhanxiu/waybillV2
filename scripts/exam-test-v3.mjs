@@ -16,13 +16,13 @@
 
 // ──── 配置 ────────────────────────────────────────────────────────
 
-let V2_URL = process.env.V2_URL || "https://20260704155001.vercel.app";
+let V2_URL = process.env.V2_URL || "https://20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app";
 let V3_URL = process.env.V3_URL || "https://20260704155001-v3.vercel.app";
 
 const INTERNAL_KEY = "v3-internal-key";
-const CONCURRENCY = 5; // 并发线程数
-const TOTAL_TICKETS = 50; // 批量创建的工单数
-const TIMEOUT_S = 60; // 单次请求超时（Vercel 冷启动可能较慢）
+const CONCURRENCY = 2; // 并发线程数（降低以避免数据库连接池耗尽）
+const TOTAL_TICKETS = 20; // 批量创建的工单数
+const TIMEOUT_S = 120; // 单次请求超时（Vercel 冷启动可能较慢）
 
 // 解析命令行参数
 for (const arg of process.argv.slice(2)) {

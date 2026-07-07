@@ -21,9 +21,13 @@ export function getDb() {
   if (!sql) {
     sql = postgres(url, {
       prepare: false,
-      max: 6,          // 并发测试需要较多连接
-      idle_timeout: 30,
-      connect_timeout: 15,
+      max: 10,                 // 适度增加连接池
+      idle_timeout: 10,        // 更快释放空闲连接
+      connect_timeout: 10,
+      max_lifetime: 30,        // 连接最大存活时间，防止堆积
+      connection: {
+        application_name: "waybill_v3",
+      },
     });
   }
   return sql;
