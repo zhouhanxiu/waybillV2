@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     const skuCode = searchParams.get("sku_code");
 
     if (!externalCode || !skuCode) {
-      return NextResponse.json({ error: "缺少参数" }, { status: 400 });
+      return NextResponse.json({ error: "缺少参数", valid: false }, { status: 400 });
     }
 
     try {
@@ -59,6 +59,7 @@ export async function GET(req: NextRequest) {
       });
     }
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    // 任何未预期错误都返回 200 降级响应，避免跨系统调用失败
+    return NextResponse.json({ valid: false, reason: err.message || "服务异常" });
   }
 }

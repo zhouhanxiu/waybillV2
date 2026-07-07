@@ -134,5 +134,51 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_item_snapshots_snap ON waybill_item_snapshots(snapshot_id);
   `);
 
+  // 自动初始化默认数据（规则、配置等）
+  try {
+    await seedDefaults();
+  } catch (err: any) {
+    console.warn("[db] seedDefaults 初始化失败（非致命）:", err.message);
+  }
+
   dbInitialized = true;
+}
+
+/** 初始化默认数据：默认解析规则、配置等 */
+async function seedDefaults() {
+  const db = getDb();
+
+  // 插入默认导入规则（如果不存在）
+  const defaultRules = [
+    {
+      id: "rule_default_excel",
+      name: "标准 Excel 出库单解析",
+      description: "默认行表格解析规则：按行读取，自动识别列名",
+      file_type: "excel",
+      config: JSON.stringify({
+        engine: "row",
+        headerRow: 1,
+        requiredFields: ["sku_code", "sku_name", "quantity"],
+        optionalFields: ["spec", "receiver_name", "receiver_phone", "receiver_address"],
+      }),
+    },
+    {
+      id: "rule_default_pdf",
+      name: "标准 PDF 出库单解析",
+      description: "默认 PDF 解析规则：使用 AI 提取表格数据",
+      file_type: "pdf",
+      config: JSON.stringify({
+        engine: "ai",
+        extractMode: "table",
+      }),
+    },
+  ];
+
+  for (const rule of defaultRules) {
+    await db`
+      INSERT INTO import_rules (id, name, description, file_type, config)
+      VALUES (${rule.id}, ${rule.name}, ${rule.description}, ${rule.file_type}, ${rule.config}::jsonb)
+      ON CONFLICT (id) DO NOTHING
+    `;
+  }
 }
