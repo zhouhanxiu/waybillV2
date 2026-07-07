@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
       reason: items.length === 0 ? "SKU 不属于该运单" : undefined,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    // 降级：DB 不可用时返回 200，避免跨系统调用 5xx 导致 V3 逻辑中断
+    return NextResponse.json({ valid: false, reason: err.message || "服务异常" });
   }
 }
