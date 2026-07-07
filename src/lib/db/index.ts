@@ -21,10 +21,10 @@ export function getDb() {
   if (!sql) {
     sql = postgres(url, {
       prepare: false,
-      max: 10,                 // 适度增加连接池
-      idle_timeout: 10,        // 更快释放空闲连接
+      max: 5,                  // 配合 Supabase pool_size=100
+      idle_timeout: 10,
       connect_timeout: 10,
-      max_lifetime: 30,        // 连接最大存活时间，防止堆积
+      max_lifetime: 60,
       connection: {
         application_name: "waybill_v3",
       },
