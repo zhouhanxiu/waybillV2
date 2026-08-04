@@ -4,5 +4,6 @@
       "path": "/api/worker/cron",
       "schedule": "0 0 * * *"
     }
-  ]
+  ],
+  "installCommand": "pnpm install --no-frozen-lockfile"
 }
