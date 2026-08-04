@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
     "@ai-sdk/openai",
     "ai",
     "xlsx",
+    "bullmq",
+    "ioredis",
   ],
   // 减少 Turbopack 文件监听范围，降低内存
   outputFileTracingExcludes: {

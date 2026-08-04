@@ -3,19 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "24.x"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "set NODE_OPTIONS=--max-old-space-size=2048 && next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "migrate:v4": "tsx scripts/migrate-v4.ts",
+    "seed:data": "tsx scripts/seed-data.ts",
+    "loadtest": "tsx scripts/loadtest.ts",
+    "report:perf": "tsx scripts/report-perf.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.8",
     "@ai-sdk/openai": "^1.0.0",
     "@neondatabase/serverless": "^0.10.4",
     "ai": "^4.0.0",
+    "bullmq": "^5.34.0",
+    "ioredis": "^5.4.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -38,6 +44,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "tsx": "^4.19.0"
   }
 }

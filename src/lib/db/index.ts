@@ -38,6 +38,20 @@ export async function query<T = any>(sqlText: string, params?: any[]) {
   return (await db.unsafe(sqlText, params)) as T[];
 }
 
+/** 在事务中执行（postgres.js）。fn 内使用传入的 tx 对象调用 tx.unsafe(...) */
+export async function withTx<T>(fn: (tx: ReturnType<ReturnType<typeof getDb>["begin"]> | any) => Promise<T>): Promise<T> {
+  const db = getDb();
+  const tx = await db.begin();
+  try {
+    const result = await fn(tx);
+    await tx.commit();
+    return result;
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  }
+}
+
 export async function initDb() {
   if (dbInitialized) return;
 
