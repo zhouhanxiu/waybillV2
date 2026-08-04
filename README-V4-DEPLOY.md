@@ -45,7 +45,10 @@ Vercel Serverless Function 在函数响应后可能休眠，`setInterval`/`内�
 ### 验证在线可访问
 - 上传：`POST https://<your-app>.vercel.app/api/import-tasks`（form-data: file + ruleId?）
 - 查询：`GET  https://<your-app>.vercel.app/api/import-tasks?taskId=xxx`
-- Cron 每 20 秒自动推进；也可手动 `GET /api/worker/cron?token=<CRON_TOKEN>` 立即推进。
+- **压测一键验证（考试推荐）**：浏览器打开 `https://<your-app>.vercel.app/loadtest`，
+  点「开始压测」即上传 `test-data/10000-orders.xlsx`（1万行）并自动轮询，页面直接显示
+  是否 ≤60s 达标。底层调用 `GET /api/loadtest`。
+- Cron 每分钟自动推进；也可手动 `GET /api/worker/cron?token=<CRON_TOKEN>` 立即推进。
 
 ## 二、生产增强方案（可选，更稳）
 
@@ -61,8 +64,8 @@ Vercel Serverless Function 在函数响应后可能休眠，`setInterval`/`内�
 npm install
 cp .env.example .env.local   # 填入 DATABASE_URL / CRON_TOKEN 等
 npm run dev                  # instrumentation 自动迁移 + 启动内存 Worker
-npm run seed:data            # 灌 2 万 SKU + 生成 scripts/loadtest-1w.xlsx
-npm run loadtest             # 压测：上传 1 万行，断言 ≤60s 完成
+npm run seed:data            # 灌 2 万 SKU + 生成 test-data/10000-orders.xlsx（考试红线文件）
+npm run loadtest             # 压测：上传 1 万行，断言 ≤60s 完成（可设 BASE_URL=https://你的vercel.app）
 npm run report:perf          # 生成压测报告 scripts/PERF-REPORT.md
 ```
 

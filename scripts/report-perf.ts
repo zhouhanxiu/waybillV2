@@ -5,11 +5,23 @@
  * 生成 scripts/PERF-REPORT.md。
  */
 import { readFileSync, existsSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { initDb, query } from "../src/lib/db";
+import { join, resolve } from "node:path";
+import { query } from "../src/lib/db";
+
+// 手动加载 .env.local / .env（tsx 脚本不自动加载）
+for (const f of [".env.local", ".env"]) {
+  try {
+    const txt = readFileSync(resolve(process.cwd(), f), "utf-8");
+    for (const line of txt.split("\n")) {
+      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+      if (m && !process.env[m[1]]) {
+        process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+      }
+    }
+  } catch {}
+}
 
 async function main() {
-  await initDb();
   const resultPath = join(process.cwd(), "scripts", "loadtest-result.json");
   if (!existsSync(resultPath)) {
     console.error("未找到压测结果，请先运行 npm run loadtest");
