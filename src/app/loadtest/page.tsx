@@ -9,6 +9,7 @@ export default function LoadTestPage() {
   const [state, setState] = useState<RunState>("idle");
   const [log, setLog] = useState<string[]>([]);
   const [result, setResult] = useState<any>(null);
+  const [report, setReport] = useState<any>(null);
   const [uploadMs, setUploadMs] = useState<number | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -18,6 +19,7 @@ export default function LoadTestPage() {
     setState("starting");
     setLog([]);
     setResult(null);
+    setReport(null);
     setUploadMs(null);
     const t0 = Date.now();
     try {
@@ -54,6 +56,15 @@ export default function LoadTestPage() {
             append(`端到端耗时=${totalMs}ms ${pass ? "✅ ≤60s（红线达标）" : "❌ 超限"}`);
             append(`成功行=${task.success_rows} 错误行=${task.error_rows} 吞吐=${task.throughput_rps}行/秒`);
             setState("done");
+            // 拉取自动生成的压测报告
+            try {
+              const rr = await fetch(`/api/loadtest/report?taskId=${body.taskId}`);
+              const rd = await rr.json();
+              setReport(rd);
+              append(`📄 压测报告已生成：阶段耗时 ${rd.phases?.length} 项、错误码 ${rd.errorDist?.length} 类`);
+            } catch (e: any) {
+              append(`报告生成异常: ${e.message}`);
+            }
           }
         } catch (e: any) {
           append(`轮询异常: ${e.message}`);
@@ -113,6 +124,24 @@ export default function LoadTestPage() {
             <li>吞吐：{result.throughput_rps} 行/秒</li>
             <li>降级（SKU校验不可用）：{result.degraded ? "是" : "否"}</li>
           </ul>
+        </div>
+      )}
+
+      {report && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-lg font-semibold text-ink">压测报告（自动生成）</h2>
+            <a
+              href={`data:text/markdown;charset=utf-8,${encodeURIComponent(report.reportMarkdown)}`}
+              download="PERF-REPORT.md"
+              className="px-3 py-1.5 text-sm rounded-lg border border-jingtian text-jingtian hover:bg-jingtian/5"
+            >
+              下载报告 .md
+            </a>
+          </div>
+          <pre className="p-4 bg-bg rounded-lg text-xs leading-relaxed text-ink-soft overflow-auto max-h-[28rem] whitespace-pre-wrap">
+            {report.reportMarkdown}
+          </pre>
         </div>
       )}
 
