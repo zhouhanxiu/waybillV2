@@ -1,0 +1,9 @@
+⨯ Error [PostgresError]: column "snapshot_id" does not exist
+    at ignore-listed frames {
+  severity_local: 'ERROR',
+  severity: 'ERROR',
+  code: '42703',
+  file: 'indexcmds.c',
+  line: '1888',
+  routine: 'ComputeIndexAttrs'
+}

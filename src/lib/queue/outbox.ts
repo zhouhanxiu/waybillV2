@@ -36,25 +36,26 @@ export async function dispatchOnce() {
        WHERE status='pending' AND next_retry_at <= NOW()
        ORDER BY created_at ASC LIMIT 100`
     );
-    for (const ev of pending) {
-      const p = ev.payload;
-      if (!p?.taskId || !p?.unitId) {
-        await query(`UPDATE event_outbox SET status='failed' WHERE id=$1`, [ev.id]);
-        continue;
+    try {
+      for (const ev of pending) {
+        const p = ev.payload;
+        if (!p?.taskId || !p?.unitId) {
+          await query(`UPDATE event_outbox SET status='failed' WHERE id=$1`, [ev.id]);
+          continue;
+        }
+        try {
+          await enqueueUnit({ taskId: p.taskId, unitId: p.unitId, unitIndex: p.unitIndex });
+          await query(`UPDATE event_outbox SET status='sent', updated_at=NOW() WHERE id=$1`, [ev.id]);
+        } catch (err) {
+          const retry = (await query<{ c: number }>(`SELECT retry_count AS c FROM event_outbox WHERE id=$1`, [ev.id]))[0]?.c ?? 0;
+          const backoff = Math.min(30000, 1000 * 2 ** retry);
+          await query(
+            `UPDATE event_outbox SET retry_count=$1, next_retry_at=NOW()+$2 * INTERVAL '1 millisecond', updated_at=NOW() WHERE id=$3`,
+            [retry + 1, backoff, ev.id]
+          );
+        }
       }
-      try {
-        await enqueueUnit({ taskId: p.taskId, unitId: p.unitId, unitIndex: p.unitIndex });
-        await query(`UPDATE event_outbox SET status='sent', updated_at=NOW() WHERE id=$1`, [ev.id]);
-      } catch (err) {
-        const retry = (await query<{ c: number }>(`SELECT retry_count AS c FROM event_outbox WHERE id=$1`, [ev.id]))[0]?.c ?? 0;
-        const backoff = Math.min(30000, 1000 * 2 ** retry);
-        await query(
-          `UPDATE event_outbox SET retry_count=$1, next_retry_at=NOW()+$2 * INTERVAL '1 millisecond', updated_at=NOW() WHERE id=$3`,
-          [retry + 1, backoff, ev.id]
-        );
-      }
+    } catch (err) {
+      console.error("[outbox] dispatch error", err);
     }
-  } catch (err) {
-    console.error("[outbox] dispatch error", err);
-  }
 }

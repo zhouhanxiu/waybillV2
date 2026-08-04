@@ -66,7 +66,7 @@ let bullWorker: any = null;
 
 async function ensureBull() {
   if (bullQueue) return;
-  const { default: Queue } = await import("bullmq");
+  const { Queue, Worker, FlowProducer } = await import("bullmq");
   const { default: IORedis } = await import("ioredis");
   const connection = new IORedis(process.env.REDIS_URL!, {
     maxRetriesPerRequest: null,
@@ -101,15 +101,15 @@ export async function enqueueUnit(job: UnitJob): Promise<void> {
 export async function startWorker(worker: WorkerFn): Promise<void> {
   if (backend === "redis") {
     await ensureBull();
-    const { default: Worker } = await import("bullmq");
+    const { Worker } = await import("bullmq");
     const { default: IORedis } = await import("ioredis");
     const connection = new IORedis(process.env.REDIS_URL!, {
       maxRetriesPerRequest: null,
     });
     bullWorker = new Worker(
       "import-units",
-      async (job) => {
-        await worker(job.data as UnitJob);
+      async (job: { data: UnitJob }) => {
+        await worker(job.data);
       },
       { connection, concurrency: memoryConcurrent }
     );

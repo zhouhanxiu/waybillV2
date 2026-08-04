@@ -13,11 +13,9 @@ for (const f of [".env.local", ".env"]) {
     }
   } catch {}
 }
-import { initDb } from "../src/lib/db/index.ts";
 import { migrateV4, isV4Migrated } from "../src/lib/db/migrate-v4";
 
 async function main() {
-  await initDb();
   const before = await isV4Migrated();
   await migrateV4();
   const after = await isV4Migrated();

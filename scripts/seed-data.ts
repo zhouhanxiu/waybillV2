@@ -10,9 +10,22 @@
  *   npx tsx scripts/seed-data.ts --xlsx-only --rows 10000
  */
 import * as XLSX from "xlsx";
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { initDb, query } from "../src/lib/db";
+import { writeFileSync, readFileSync, mkdirSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { query } from "../src/lib/db";
+
+// 手动加载 .env.local / .env（tsx 脚本不会自动加载）
+for (const f of [".env.local", ".env"]) {
+  try {
+    const txt = readFileSync(resolve(process.cwd(), f), "utf-8");
+    for (const line of txt.split("\n")) {
+      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+      if (m && !process.env[m[1]]) {
+        process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+      }
+    }
+  } catch {}
+}
 
 const SKU_TOTAL = 20000;
 const ROWS = parseInt(process.argv.find((a) => a.startsWith("--rows"))?.split("=")[1] || "10000");
@@ -70,12 +83,19 @@ function buildXlsx() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "waybills");
   const out = join(process.cwd(), "scripts", "fixtures", `waybills-${ROWS}.xlsx`);
+  mkdirSync(join(process.cwd(), "scripts", "fixtures"), { recursive: true });
   XLSX.writeFile(wb, out);
   console.log("xlsx 已生成:", out);
+
+  // 同时输出考试要求的标准压测文件 test-data/10000-orders.xlsx
+  const stdDir = join(process.cwd(), "test-data");
+  mkdirSync(stdDir, { recursive: true });
+  const stdOut = join(stdDir, "10000-orders.xlsx");
+  XLSX.writeFile(wb, stdOut);
+  console.log("标准压测文件已生成:", stdOut);
 }
 
 async function main() {
-  if (!skuOnly) await initDb();
   if (!xlsxOnly) await seedSku();
   if (!skuOnly) buildXlsx();
 }

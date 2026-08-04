@@ -13,8 +13,8 @@
  * 这样即使没有 Redis、纯 Vercel 部署，也能保证任务最终被处理完，
  * 满足考试红线"部署可访问的在线系统"。
  *
- * 配置见 vercel.json：
- *   { "crons": [{ "path": "/api/worker/cron", "schedule": "*/20 * * * * *" }] }
+ * 配置见 vercel.json（Vercel Cron 最短粒度为 1 分钟）：
+ *   { "crons": [{ "path": "/api/worker/cron", "schedule": "* * * * *" }] }
  */
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";

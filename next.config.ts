@@ -13,10 +13,7 @@ const nextConfig: NextConfig = {
   ],
   // 减少 Turbopack 文件监听范围，降低内存
   outputFileTracingExcludes: {
-    "*": [
-      "node_modules/.pnpm/**",
-      ".next/**",
-    ],
+    "*": ["node_modules/.pnpm/**", ".next/**"],
   },
 };
 

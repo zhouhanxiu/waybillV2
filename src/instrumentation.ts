@@ -26,7 +26,9 @@ export async function register() {
     if (workerMode !== "cron") {
       const { startWorker } = await import("@/lib/queue");
       const { processUnit } = await import("@/lib/worker/processUnit");
-      await startWorker((job) => processUnit(job.taskId, job.unitId));
+      await startWorker(async (job) => {
+        await processUnit(job.taskId, job.unitId);
+      });
       console.log("[instrumentation] V4 worker started (memory pump)");
     } else {
       console.log("[instrumentation] V4 worker mode=cron, skip memory pump (Cron route consumes)");

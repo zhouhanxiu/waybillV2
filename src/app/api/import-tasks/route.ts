@@ -165,10 +165,17 @@ function defaultRule(): ParseRule {
   } as ParseRule;
 }
 
-/** GET /api/import-tasks?taskId= 查询任务状态 */
+/** GET /api/import-tasks 列表；GET /api/import-tasks?taskId= 单个任务状态 */
 export async function GET(req: NextRequest) {
   const taskId = req.nextUrl.searchParams.get("taskId");
-  if (!taskId) return NextResponse.json({ error: "taskId required" }, { status: 400 });
+  // 无 taskId → 返回任务列表（供 /tasks 页面）
+  if (!taskId) {
+    const rows = await query<any>(
+      `SELECT id, file_name, status, total_rows, success_rows, failed_rows, created_at, finished_at
+       FROM import_tasks ORDER BY created_at DESC LIMIT 50`
+    );
+    return NextResponse.json({ tasks: rows });
+  }
   const rows = await query<any>(
     `SELECT id, status, total_rows, total_units, processed_units, success_rows, error_rows,
             valid_rows, degraded, duration_ms, created_at, updated_at, error_message
