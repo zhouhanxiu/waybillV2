@@ -71,15 +71,14 @@ function buildXlsx() {
   // 单号前缀：带 TAG 保证每次生成不重复，避免与库里已有 external_code 冲突
   const prefix = "EXT" + TAG;
   console.log(`生成 ${ROWS} 行运单明细 xlsx（含 ~5% 非法 SKU，单号前缀 ${prefix}）...`);
-  // 列头与 parser 矩阵转置期望一致：单号、门店、收件人、电话、地址、SKU编码、SKU名称、数量
-  const header = ["单号", "门店", "收件人", "电话", "地址", "SKU编码", "SKU名称", "数量"];
+  // 列头避免触发 matrix 引擎（不含"门店"且不含"SKU"前缀），走 row-based 普通行解析
+  const header = ["单号", "收件人", "电话", "地址", "商品编码", "商品名称", "数量"];
   const data: any[][] = [header];
   for (let i = 0; i < ROWS; i++) {
     const isBad = Math.random() < 0.05; // 5% 非法 SKU
     const skuIdx = isBad ? 999999 : Math.floor(Math.random() * SKU_TOTAL);
     data.push([
       prefix + String(i).padStart(6, "0"),
-      "门店" + (i % 50),
       "收件人" + i,
       randPhone(),
       "广东省深圳市南山区科技园" + i + "号",
