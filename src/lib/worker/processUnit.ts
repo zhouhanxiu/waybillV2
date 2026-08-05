@@ -429,7 +429,7 @@ async function checkTaskCompletion(taskId: string, degraded: boolean) {
     const end = new Date(durRows[0]?.end || Date.now()).getTime();
     const dur = Math.max(0, end - start);
     await query(
-      `UPDATE import_tasks SET status='completed', degraded=$2, duration_ms=$3, updated_at=NOW() WHERE id=$1`,
+      `UPDATE import_tasks SET status='completed', degraded=$2, duration_ms=$3, updated_at=NOW(), finished_at=NOW() WHERE id=$1`,
       [taskId, degraded, dur]
     );
   }

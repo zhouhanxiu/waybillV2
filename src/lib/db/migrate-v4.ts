@@ -9,6 +9,9 @@
 import { query } from "./index";
 
 export async function migrateV4(): Promise<void> {
+  // 禁用会话级 statement_timeout，避免 Supabase 默认短超时导致建索引被取消
+  await query(`SET statement_timeout = 0;`);
+
   // 1. SKU 主数据表（2万条基准数据，提供批量校验数据源）
   await query(`
     CREATE TABLE IF NOT EXISTS sku_master (
@@ -48,7 +51,8 @@ export async function migrateV4(): Promise<void> {
       error_message TEXT,
       duration_ms BIGINT DEFAULT 0,
       created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW()
+      updated_at TIMESTAMP DEFAULT NOW(),
+      finished_at TIMESTAMP
     );
   `);
   await query(`
