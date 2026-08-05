@@ -19,14 +19,17 @@ export function getDb() {
   if (!raw) throw new Error("DATABASE_URL is not set");
   const url = sanitizeUrl(raw);
   if (!sql) {
-    sql = postgres(url, {
+    // statement_timeout 是 Postgres 运行时参数（非 postgres.js 连接选项）。
+    // 通过连接串 options 注入，使连接池里每个新连接都禁用 statement 超时（0 = 不超时），
+    // 避免 Supabase 对建索引/大批量 UPSERT 取消语句。
+    const opts = "options=-c%20statement_timeout=0";
+    const urlWithOpts = url.includes("?") ? `${url}&${opts}` : `${url}?${opts}`;
+    sql = postgres(urlWithOpts, {
       prepare: false,
       max: 10,
       idle_timeout: 20,
       connect_timeout: 10,
       max_lifetime: 30,
-      // 默认禁用 statement_timeout（0 = 不超时），避免 Supabase 对建索引/大批量 UPSERT 取消语句
-      statement_timeout: 0,
       connection: {
         application_name: "waybill_v3",
       },
