@@ -25,6 +25,8 @@ export function getDb() {
       idle_timeout: 20,
       connect_timeout: 10,
       max_lifetime: 30,
+      // 默认禁用 statement_timeout（0 = 不超时），避免 Supabase 对建索引/大批量 UPSERT 取消语句
+      statement_timeout: 0,
       connection: {
         application_name: "waybill_v3",
       },
