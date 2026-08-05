@@ -19,8 +19,18 @@ export async function POST() {
 
     const BATCH = 2000;
     const TOTAL = 20000;
+    type SkuRow = {
+      sku_code: string;
+      sku_name: string;
+      category: string;
+      spec: string;
+      unit: string;
+      price: number;
+      barcode: string;
+      status: string;
+    };
     for (let i = 0; i < TOTAL; i += BATCH) {
-      const rows = [];
+      const rows: SkuRow[] = [];
       for (let j = i; j < Math.min(i + BATCH, TOTAL); j++) {
         const code = `SKU${String(j + 1).padStart(6, "0")}`;
         const name = `商品${j + 1}`;
