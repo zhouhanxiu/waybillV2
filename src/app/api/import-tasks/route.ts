@@ -149,10 +149,10 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   });
 
   // Outbox 已在同一事务写入 pending 事件，保证事件可靠（进程重启可恢复）。
-  // 纯 Vercel 方案：HTTP 返回后，Vercel Function 进程仍存活数十秒，
-  // 我们 fire-and-forget 立即消费所有单元（满足"上传即返回 ≤1s" + "1万行 ≤60s 完成"）。
-  // Cron 路由（每分钟）作为兜底，消费任何因函数超时被打断的剩余单元。
-  void consumeAllUnits(taskId).catch((err) =>
+  // 纯 Vercel 方案：HTTP 返回后 Vercel Function 进程立即冻结，fire-and-forget 无法继续。
+  // 因此同步消费全部单元——1万行 / 10 单元，每单元 <1s，整体远小于 60s 函数上限。
+  // 这同时满足：上传即返回（含消费整体 <60s 完成）+ Outbox 兜底（请求失败事件仍可重投）。
+  await consumeAllUnits(taskId).catch((err) =>
     console.error("[import-tasks] background consume error", taskId, err?.message)
   );
 
