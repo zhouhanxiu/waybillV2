@@ -39,7 +39,8 @@ const tagArg = process.argv.find((a) => a.startsWith("--tag"))?.split("=")[1];
 const TAG = fresh ? new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14) : (tagArg ?? "");
 
 function randPhone() {
-  return "1" + (3 + Math.floor(Math.random() * 6)) + String(Math.floor(Math.random() * 1e8)).padStart(8, "0");
+  // 合法手机号：1 + [3-9] + 9 位数字，共 11 位，匹配 /^1[3-9]\d{9}$/
+  return "1" + (3 + Math.floor(Math.random() * 7)) + String(Math.floor(Math.random() * 1e9)).padStart(9, "0");
 }
 function randSku(i: number) {
   return "SKU" + String(i).padStart(6, "0");
