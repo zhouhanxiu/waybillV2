@@ -71,7 +71,8 @@ function buildXlsx() {
   // 单号前缀：带 TAG 保证每次生成不重复，避免与库里已有 external_code 冲突
   const prefix = "EXT" + TAG;
   console.log(`生成 ${ROWS} 行运单明细 xlsx（含 ~5% 非法 SKU，单号前缀 ${prefix}）...`);
-  const header = ["单号", "门店", "收件人", "电话", "地址", "SKU编码", "名称", "数量"];
+  // 列头与 parser 矩阵转置期望一致：单号、门店、收件人、电话、地址、SKU编码、SKU名称、数量
+  const header = ["单号", "门店", "收件人", "电话", "地址", "SKU编码", "SKU名称", "数量"];
   const data: any[][] = [header];
   for (let i = 0; i < ROWS; i++) {
     const isBad = Math.random() < 0.05; // 5% 非法 SKU
