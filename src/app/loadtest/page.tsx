@@ -59,9 +59,13 @@ export default function LoadTestPage() {
             // 拉取自动生成的压测报告
             try {
               const rr = await fetch(`/api/loadtest/report?taskId=${body.taskId}`);
-              const rd = await rr.json();
-              setReport(rd);
-              append(`📄 压测报告已生成：阶段耗时 ${rd.phases?.length} 项、错误码 ${rd.errorDist?.length} 类`);
+              if (!rr.ok) {
+                append(`报告接口 HTTP ${rr.status}：${(await rr.text()).slice(0, 200)}`);
+              } else {
+                const rd = await rr.json();
+                setReport(rd);
+                append(`📄 压测报告已生成：阶段耗时 ${rd.phases?.length} 项、错误码 ${rd.errorDist?.length} 类`);
+              }
             } catch (e: any) {
               append(`报告生成异常: ${e.message}`);
             }
