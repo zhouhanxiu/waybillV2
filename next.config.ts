@@ -11,10 +11,8 @@ const nextConfig: NextConfig = {
     "bullmq",
     "ioredis",
   ],
-  // 减少 Turbopack 文件监听范围，降低内存
-  outputFileTracingExcludes: {
-    "*": ["node_modules/.pnpm/**", ".next/**"],
-  },
+  // 强制使用 webpack 而非 Turbopack，规避 Vercel 上 Turbopack chunk 丢失问题
+  turbopack: false,
 };
 
 export default nextConfig;
