@@ -5,5 +5,5 @@
       "schedule": "0 0 * * *"
     }
   ],
-  "installCommand": "pnpm install --no-frozen-lockfile"
+  "installCommand": "echo 'node-linker=hoisted' > .npmrc && pnpm install --no-frozen-lockfile"
 }
