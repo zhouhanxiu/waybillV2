@@ -6,6 +6,7 @@ import { readExcel, readExcelSheet, readPdf } from "@/lib/parser/reader";
 import { parseFile } from "@/lib/parser";
 import type { ParseRule } from "@/lib/types";
 import { validateWaybill } from "@/lib/validation";
+import { processUnit } from "@/lib/worker/processUnit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -36,8 +37,6 @@ export async function POST(req: NextRequest) {
  * fire-and-forget 与 Cron 路由同时跑也不会双跑同一单元。
  */
 async function consumeAllUnits(taskId: string) {
-  // 动态 import，避免在非 Worker 路径也加载 processUnit（保持冷启动轻量）
-  const { processUnit } = await import("@/lib/worker/processUnit");
   for (;;) {
     const due = await query<{ id: string }>(
       `SELECT id FROM import_task_batches

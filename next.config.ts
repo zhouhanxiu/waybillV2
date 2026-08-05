@@ -11,8 +11,10 @@ const nextConfig: NextConfig = {
     "bullmq",
     "ioredis",
   ],
-  // 强制使用 webpack 而非 Turbopack，规避 Vercel 上 Turbopack chunk 丢失问题
-  turbopack: false,
+  // 强制把构建产物所有 chunks 纳入部署，规避 Turbopack 下共享 chunk(如 src_lib_parser) 丢失
+  outputFileTracingIncludes: {
+    "**/*": ["./.next/server/chunks/**", "./.next/server/**"],
+  },
 };
 
 export default nextConfig;
