@@ -329,8 +329,9 @@ async function batchUpsertWaybills(rows: any[], taskId: string): Promise<number>
       placeholders.push("(" + tuple.map(() => `$${p++}`).join(",") + ")");
     }
     const colList = cols.join(", ");
+    // 排除冲突键（external_code/sku_code/batch_id）与末尾显式追加的 raw_data，避免重复的 SET 列
     const updateCols = cols
-      .filter((c) => c !== "external_code" && c !== "sku_code" && c !== "batch_id")
+      .filter((c) => c !== "external_code" && c !== "sku_code" && c !== "batch_id" && c !== "raw_data")
       .map((c) => `${c} = EXCLUDED.${c}`)
       .join(", ");
     await query(
