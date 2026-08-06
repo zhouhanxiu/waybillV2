@@ -152,7 +152,8 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   }
 
   // 3. 切片
-  const totalUnits = Math.ceil(rows.length / UNIT_ROW_LIMIT);
+  const totalRows = rows.length;
+  const totalUnits = Math.ceil(totalRows / UNIT_ROW_LIMIT);
   const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const traceId = `trace-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
@@ -164,13 +165,13 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
       `INSERT INTO import_tasks
         (id, file_name, file_size, file_type, rule_id, total_rows, total_units, status, trace_id, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,'uploaded',$8,NOW(),NOW())`,
-      [taskId, fileName, buffer.length, fileType, ruleId, rows.length, totalUnits, traceId]
+      [taskId, fileName, buffer.length, fileType, ruleId, totalRows, totalUnits, traceId]
     );
 
     for (let i = 0; i < totalUnits; i++) {
       const unitId = `${taskId}-u${i}`;
       const start = i * UNIT_ROW_LIMIT;
-      const end = Math.min(start + UNIT_ROW_LIMIT, rows.length);
+      const end = Math.min(start + UNIT_ROW_LIMIT, totalRows);
       const unitRows = rows.slice(start, end);
       const payloadB64 = Buffer.from(JSON.stringify(unitRows), "utf-8").toString("base64");
       unitPayloads.push({ unitId, payloadB64 });
@@ -215,13 +216,13 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
       await query(
         `INSERT INTO batch_performance_log (task_id, unit_id, phase, rows_processed, duration_ms, throughput_rps)
          VALUES ($1,$2,'parse_read',$3,$4,$5)`,
-        [taskId, `${taskId}#parse`, rows.length, elapsed, rows.length > 0 ? Math.round((rows.length / Math.max(elapsed, 1)) * 1000 * 100) / 100 : 0]
+        [taskId, `${taskId}#parse`, totalRows, elapsed, totalRows > 0 ? Math.round((totalRows / Math.max(elapsed, 1)) * 1000 * 100) / 100 : 0]
       );
       await query(
         `INSERT INTO trace_events
           (trace_id, task_id, service, span_name, level, message, started_at, "timestamp", duration_ms)
          VALUES ($1,$2,'api-gateway','import.received','INFO',$3,NOW(),NOW(),$4)`,
-        [traceId, taskId, `接收导入：file=${fileName} rows=${rows.length} units=${totalUnits}`, elapsed]
+        [traceId, taskId, `接收导入：file=${fileName} rows=${totalRows} units=${totalUnits}`, elapsed]
       );
       try {
         const { dispatchOnce } = await import("@/lib/queue/outbox");
@@ -235,12 +236,12 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   })();
 
   const elapsed = Date.now() - t0;
-  console.log(JSON.stringify({ stage: "import.accepted", taskId, acceptedInMs: elapsed, totalRows: rows.length, totalUnits }));
+  console.log(JSON.stringify({ stage: "import.accepted", taskId, acceptedInMs: elapsed, totalRows, totalUnits }));
 
   return NextResponse.json({
     taskId,
     traceId,
-    totalRows: rows.length,
+    totalRows,
     totalUnits,
     status: "uploaded",
     acceptedInMs: elapsed,
