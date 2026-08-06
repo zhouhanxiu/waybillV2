@@ -187,6 +187,8 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   // 非 QStash 模式（memory/cron）：同步消费全部单元（1万行单单元场景整体 <60s）。
   const useQstash = (process.env.QUEUE_BACKEND || "memory") === "qstash";
   if (useQstash) {
+    // 返回前同步等待至少一次投递完成（确保 outbox 事件真正发到 QStash，
+    // 避免 Serverless 进程冻结导致投递丢失）；region 已修正，publish 通常 <1s
     try {
       const { dispatchOnce } = await import("@/lib/queue/outbox");
       const dT0 = Date.now();

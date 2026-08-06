@@ -94,7 +94,9 @@ function ensureQstash(): Client {
   if (!qstashClient) {
     const token = process.env.QSTASH_TOKEN;
     if (!token) throw new Error("QSTASH_TOKEN 未配置，无法使用 qstash 后端");
-    qstashClient = new Client({ token });
+    // 多区域支持：账号实际在 eu-central-1，必须显式指定 baseUrl 否则命中默认 region 404
+    const baseUrl = process.env.QSTASH_URL || "https://qstash.eu-central-1.upstash.io";
+    qstashClient = new Client({ token, baseUrl });
   }
   return qstashClient;
 }

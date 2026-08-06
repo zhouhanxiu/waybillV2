@@ -9,20 +9,16 @@
 Vercel CLI 58.7.1 (Node.js 24.14.1)
 Retrieving project…
 Deploying zhous-projects-daecd222/20260704155001
-Uploading [--------------------] (0.0B/54.4KB)
-Uploading [======--------------] (17.9KB/54.4KB)
-Uploading [===========---------] (31.1KB/54.4KB)
-Uploading [=================---] (47.4KB/54.4KB)
-Uploading [====================] (54.4KB/54.4KB)
-  Inspect         https://vercel.com/zhous-projects-daecd222/20260704155001/DqMWtJUk8cybxcV6CvapiiwimqTG
-  Production      https://20260704155001-pr09ykxp4-zhous-projects-daecd222.vercel.app
-Building…
+Uploading [--------------------] (0.0B/2.3KB)
+Uploading [====================] (2.3KB/2.3KB)
+  Inspect         https://vercel.com/zhous-projects-daecd222/20260704155001/8T2BdsJLW35jVmG7qA75zTsk2bfr
+  Production      https://20260704155001-610d8lzw5-zhous-projects-daecd222.vercel.app
 Building…
 Running build in Washington, D.C., USA (East) – iad1
 Build machine configuration: 2 cores, 8 GB
 Retrieving list of deployment files...
-Downloading 131 deployment files...
-Restored build cache from previous deployment (BBR2idLsEk3G3vBh5U8XbKB67D9m)
+Downloading 132 deployment files...
+Restored build cache from previous deployment (DqMWtJUk8cybxcV6CvapiiwimqTG)
 Running "vercel build"
 Vercel CLI 58.1.0
 Warning: Detected "engines": { "node": ">=20.0.0" } in your `package.json` that will automatically upgrade when a new m
@@ -34,7 +30,10 @@ Running "install" command: `echo 'node-linker=hoisted' > .npmrc && pnpm install 
 Lockfile is up to date, resolution step is skipped
 Packages: -108
 --------------------------------------------------------------------------------
-Done in 14.5s using pnpm v10.28.0
+Progress: resolved 0, reused 0, downloaded 1, added 0
+Progress: resolved 0, reused 0, downloaded 4, added 0, done
+Progress: resolved 0, reused 0, downloaded 4, added 0, done
+Done in 13.8s using pnpm v10.28.0
 Detected Next.js version: 16.2.10
 Running "pnpm run build"
 > ai-waybill-import-v2@0.1.0 build /vercel/path0
@@ -58,15 +57,15 @@ Import trace:
 App Route:
 ./next.config.ts
 ./src/app/api/fixture/route.ts
-✓ Compiled successfully in 11.0s
+✓ Compiled successfully in 10.6s
 Running TypeScript ...
-Finished TypeScript in 6.7s ...
+Finished TypeScript in 6.3s ...
 Collecting page data using 1 worker ...
 Generating static pages using 1 worker (0/35) ...
 Generating static pages using 1 worker (8/35)
 Generating static pages using 1 worker (17/35)
 Generating static pages using 1 worker (26/35)
-✓ Generating static pages using 1 worker (35/35) in 276ms
+✓ Generating static pages using 1 worker (35/35) in 265ms
 Finalizing page optimization ...
 Running onBuildComplete from Vercel
 Warning: Detected "engines": { "node": ">=20.0.0" } in your `package.json` that will automatically upgrade when a new m
@@ -112,11 +111,11 @@ Route (app)
 └ ○ /waybills
 ○  (Static)   prerendered as static content
 ƒ  (Dynamic)  server-rendered on demand
-Build Completed in /vercel/output [36s]
+Build Completed in /vercel/output [34s]
 Deploying outputs...
-[2K[1A[2K[G  Production      https://20260704155001-pr09ykxp4-zhous-projects-daecd222.vercel.app
+[2K[1A[2K[G  Production      https://20260704155001-610d8lzw5-zhous-projects-daecd222.vercel.app
 Completing…
 ▲ Aliased         https://20260704155001.vercel.app
 
-✓ Ready in 57s
-https://20260704155001-pr09ykxp4-zhous-projects-daecd222.vercel.app
+✓ Ready in 2m
+https://20260704155001-610d8lzw5-zhous-projects-daecd222.vercel.app
