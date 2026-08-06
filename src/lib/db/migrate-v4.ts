@@ -63,6 +63,24 @@ export async function migrateV4(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_import_tasks_status ON import_tasks(status, created_at);
     CREATE INDEX IF NOT EXISTS idx_import_tasks_created ON import_tasks(created_at DESC);
   `);
+  // 兼容旧库（V3 表结构）：补齐 V4 新增列，避免 "column does not exist"
+  await query(`
+    ALTER TABLE IF EXISTS import_tasks
+      ADD COLUMN IF NOT EXISTS file_size BIGINT DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS file_type TEXT NOT NULL DEFAULT 'excel',
+      ADD COLUMN IF NOT EXISTS rule_id TEXT,
+      ADD COLUMN IF NOT EXISTS file_payload TEXT,
+      ADD COLUMN IF NOT EXISTS total_units INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS processed_units INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS valid_rows INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS warning_rows INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS degraded BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS duration_ms BIGINT DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS finished_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS trace_id TEXT;
+    ALTER TABLE IF EXISTS import_tasks ADD COLUMN IF NOT EXISTS error_message TEXT;
+    CREATE INDEX IF NOT EXISTS idx_import_tasks_trace_id ON import_tasks(trace_id);
+  `);
 
   // 3. 处理单元表（批 = 固定行数的处理单元，幂等单元）
   await query(`
