@@ -157,7 +157,8 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   const traceId = `trace-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
   // 4. 事务：只写 task + batches（占位空 payload）+ outbox，不写 payload 避免大 JSON 序列化阻塞
-  const unitMeta: Array<{ unitId: string; unitIndex: number; unitRows: ParsedRow[] }> = [];
+  // 优化：只存 base64 payload 字符串，不保留 rows 数组引用，让 GC 能回收内存
+  const unitPayloads: Array<{ unitId: string; payloadB64: string }> = [];
   await withTx(async (tx: any) => {
     await tx.unsafe(
       `INSERT INTO import_tasks
@@ -171,7 +172,8 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
       const start = i * UNIT_ROW_LIMIT;
       const end = Math.min(start + UNIT_ROW_LIMIT, rows.length);
       const unitRows = rows.slice(start, end);
-      unitMeta.push({ unitId, unitIndex: i, unitRows });
+      const payloadB64 = Buffer.from(JSON.stringify(unitRows), "utf-8").toString("base64");
+      unitPayloads.push({ unitId, payloadB64 });
 
       await tx.unsafe(
         `INSERT INTO import_task_batches
@@ -189,21 +191,23 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
     }
   });
 
+  // 释放 rows 数组，减少内存占用
+  rows.length = 0;
+
   // 5. 异步补写 payload，写完后 dispatch（fire-and-forget）
   void (async () => {
     // 5a. 写 payload
-    for (const u of unitMeta) {
+    for (const u of unitPayloads) {
       try {
-        const payloadB64 = Buffer.from(JSON.stringify(u.unitRows), "utf-8").toString("base64");
         await query(
           `UPDATE import_task_batches SET unit_payload=$1, updated_at=NOW() WHERE id=$2`,
-          [payloadB64, u.unitId]
+          [u.payloadB64, u.unitId]
         );
       } catch (err: any) {
         console.error(`[import-tasks] payload write failed ${u.unitId}:`, err?.message);
       }
     }
-    console.log(JSON.stringify({ stage: "import.payload_written", taskId, units: unitMeta.length }));
+    console.log(JSON.stringify({ stage: "import.payload_written", taskId, units: unitPayloads.length }));
 
     // 5b. payload 写完后 dispatch + 性能日志
     try {
