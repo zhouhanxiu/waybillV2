@@ -52,8 +52,12 @@ export async function migrateV4(): Promise<void> {
       duration_ms BIGINT DEFAULT 0,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW(),
-      finished_at TIMESTAMP
+      finished_at TIMESTAMP,
+      trace_id TEXT
     );
+    -- 兼容旧库：若 import_tasks 已存在（无 trace_id 列），补列
+    ALTER TABLE IF EXISTS import_tasks ADD COLUMN IF NOT EXISTS trace_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_import_tasks_trace_id ON import_tasks(trace_id);
   `);
   await query(`
     CREATE INDEX IF NOT EXISTS idx_import_tasks_status ON import_tasks(status, created_at);

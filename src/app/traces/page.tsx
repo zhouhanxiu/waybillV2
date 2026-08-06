@@ -8,8 +8,10 @@ function TracesInner() {
   const sp = useSearchParams();
   const [taskId, setTaskId] = useState(sp.get("taskId") || "");
   const [traceId, setTraceId] = useState("");
+  const [errorCode, setErrorCode] = useState(sp.get("error_code") || "");
   const [traces, setTraces] = useState<any[]>([]);
   const [spans, setSpans] = useState<any[]>([]);
+  const [errors, setErrors] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedTrace, setSelectedTrace] = useState<string | null>(null);
 
@@ -17,23 +19,27 @@ function TracesInner() {
     setLoading(true);
     setSelectedTrace(null);
     setSpans([]);
+    setTraces([]);
+    setErrors([]);
     try {
       const params = new URLSearchParams();
       if (traceId) params.set("traceId", traceId);
+      else if (errorCode) params.set("error_code", errorCode);
       else if (taskId) params.set("taskId", taskId);
       const res = await fetch(`/api/traces?${params.toString()}`);
       if (res.ok) {
         const d = await res.json();
         if (traceId) setSpans(d.spans || []);
+        else if (errorCode) setErrors(d.errors || []);
         else setTraces(d.traces || []);
       }
     } finally {
       setLoading(false);
     }
-  }, [taskId, traceId]);
+  }, [taskId, traceId, errorCode]);
 
   useEffect(() => {
-    if (taskId) search();
+    if (taskId || errorCode) search();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -71,7 +77,37 @@ function TracesInner() {
 
       {loading && <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-jingtian" /></div>}
 
-      {selectedTrace ? (
+      {errorCode && !selectedTrace ? (
+        <div className="bg-white rounded-xl border border-line overflow-hidden">
+          <div className="px-4 py-3 flex items-center gap-2 border-b border-line">
+            <span className="font-mono text-sm font-semibold text-red-600">{errorCode}</span>
+            <span className="text-sm text-ink-soft">错误明细（共 {errors.length} 条）</span>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-bg text-ink-soft"><tr>
+              <th className="text-left px-4 py-2">任务</th>
+              <th className="text-right px-4 py-2">行号</th>
+              <th className="text-left px-4 py-2">错误信息</th>
+              <th className="text-left px-4 py-2">原始行(脱敏)</th>
+              <th className="text-left px-4 py-2">时间</th>
+            </tr></thead>
+            <tbody>
+              {errors.map((e) => (
+                <tr key={e.id} className="border-t border-line hover:bg-bg">
+                  <td className="px-4 py-2 font-mono text-xs">
+                    <Link href={`/traces?taskId=${e.task_id}`} className="text-jingtian hover:underline">{e.task_id.slice(0, 8)}</Link>
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums">{e.row_index}</td>
+                  <td className="px-4 py-2 text-red-600 max-w-[260px] truncate" title={e.error_message}>{e.error_message}</td>
+                  <td className="px-4 py-2 text-ink-soft max-w-[220px] truncate">{e.raw_row}</td>
+                  <td className="px-4 py-2 text-ink-soft text-xs">{new Date(e.created_at).toLocaleString()}</td>
+                </tr>
+              ))}
+              {errors.length === 0 && !loading && <tr><td colSpan={5} className="text-center py-8 text-ink-soft">该错误码暂无记录</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      ) : selectedTrace ? (
         <div className="bg-white rounded-xl border border-line p-4">
           <button onClick={() => { setSelectedTrace(null); setSpans([]); if (taskId) search(); }} className="flex items-center gap-1 text-sm text-jingtian hover:underline mb-3">
             <ArrowLeft className="w-4 h-4" /> 返回

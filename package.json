@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "22.x"
+    "node": ">=20.0.0"
   },
   "scripts": {
     "dev": "set NODE_OPTIONS=--max-old-space-size=2048 && next dev",
@@ -19,12 +19,13 @@
     "@ai-sdk/anthropic": "^4.0.8",
     "@ai-sdk/openai": "^1.0.0",
     "@neondatabase/serverless": "^0.10.4",
+    "@upstash/qstash": "^2.11.3",
     "ai": "^4.0.0",
     "bullmq": "^5.34.0",
-    "ioredis": "^5.4.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "ioredis": "^5.4.1",
     "lucide-react": "^0.469.0",
     "next": "16.2.10",
     "pdf-parse": "^1.1.1",
@@ -44,7 +45,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
-    "typescript": "^5",
-    "tsx": "^4.19.0"
+    "tsx": "^4.19.0",
+    "typescript": "^5"
   }
 }

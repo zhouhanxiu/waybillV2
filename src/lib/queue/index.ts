@@ -13,7 +13,7 @@
  * 由 processUnit() 幂等执行，因此队列仅负责"触发"，不负责"持久真相"。
  */
 
-export type QueueBackend = "memory" | "redis";
+export type QueueBackend = "memory" | "redis" | "qstash";
 
 export interface UnitJob {
   taskId: string;
@@ -22,6 +22,12 @@ export interface UnitJob {
 }
 
 type WorkerFn = (job: UnitJob) => Promise<void>;
+
+// qstash 模式下供 /api/worker/qstash 回调复用已登记的 worker 函数
+let registeredWorker: WorkerFn | null = null;
+export function getRegisteredWorker(): WorkerFn | null {
+  return registeredWorker;
+}
 
 const backend: QueueBackend =
   (process.env.QUEUE_BACKEND as QueueBackend) || "memory";
@@ -78,6 +84,27 @@ async function ensureBull() {
 
 export const queueBackend = backend;
 
+// ── qstash 后端实现（HTTP 消息队列，Serverless 原生适配）──────────
+// 发布到 QStash，由 /api/worker/qstash 消费 → processUnit。
+// 优点：Vercel 等无常驻进程平台也能即时触发，带平台级重试/幂等。
+import { Client } from "@upstash/qstash";
+
+let qstashClient: Client | null = null;
+function ensureQstash(): Client {
+  if (!qstashClient) {
+    const token = process.env.QSTASH_TOKEN;
+    if (!token) throw new Error("QSTASH_TOKEN 未配置，无法使用 qstash 后端");
+    qstashClient = new Client({ token });
+  }
+  return qstashClient;
+}
+
+function qstashWorkerUrl(): string {
+  const base = (process.env.APP_BASE_URL || process.env.VERCEL_URL || "").replace(/\/$/, "");
+  if (!base) throw new Error("APP_BASE_URL / VERCEL_URL 未配置，无法确定 QStash 回调地址");
+  return `${base}/api/worker/qstash`;
+}
+
 /** 入队一个处理单元 */
 export async function enqueueUnit(job: UnitJob): Promise<void> {
   if (backend === "redis") {
@@ -91,6 +118,17 @@ export async function enqueueUnit(job: UnitJob): Promise<void> {
     });
     return;
   }
+  if (backend === "qstash") {
+    // 幂等键用 unitId，QStash 同一 messageId 不重复投递
+    await ensureQstash().publishJSON({
+      url: qstashWorkerUrl(),
+      body: job,
+      messageId: job.unitId,
+      retries: 3,
+      delay: 0,
+    });
+    return;
+  }
   // memory
   if (!memoryActive.has(job.unitId)) {
     memoryQueue.push(job);
@@ -99,6 +137,13 @@ export async function enqueueUnit(job: UnitJob): Promise<void> {
 
 /** 启动 Worker（消费队列）。memory 模式会自驱动；redis 模式起 BullMQ Worker。 */
 export async function startWorker(worker: WorkerFn): Promise<void> {
+  if (backend === "qstash") {
+    // qstash 模式下，消费由 /api/worker/qstash 路由接收 QStash 回调完成，
+    // 这里无需启动进程内 pump（Serverless 无常驻进程）。仅登记 worker 函数供回调复用。
+    registeredWorker = worker;
+    console.log("[queue] qstash backend: consuming via /api/worker/qstash (no in-process pump)");
+    return;
+  }
   if (backend === "redis") {
     await ensureBull();
     const { Worker } = await import("bullmq");

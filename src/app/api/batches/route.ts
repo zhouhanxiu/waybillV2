@@ -2,7 +2,7 @@
  * 导入批次 & 运单提交 API
  */
 import { NextRequest, NextResponse } from "next/server";
-import { query, initDb } from "@/lib/db";
+import { query, initDb, withTx } from "@/lib/db";
 import { uid } from "@/lib/utils";
 import { assignGeneratedExternalCodes } from "@/lib/code-gen";
 
@@ -112,15 +112,22 @@ export async function POST(req: NextRequest) {
     await assignGeneratedExternalCodes(waybills);
 
     // 创建运单和物品 — 使用批量插入提高性能
+    // 注意：Postgres 单条 SQL 参数上限 65534，waybill 8 字段 / item 6 字段
+    // 500 行 waybill = 4000 参数，500 个 item = 3000 参数，安全
+    const WAYBILL_CHUNK = 500;
+    const ITEM_CHUNK = 500;
     const waybillValues: string[] = [];
     const waybillParams: any[] = [];
     const itemValues: string[] = [];
     const itemParams: any[] = [];
 
+    // 预生成所有运单 ids 和 items（保证关联稳定）
+    const plannedItems: { itemValues: string[]; itemParams: any[] }[] = [];
+
     for (let i = 0; i < waybills.length; i++) {
       const wb = waybills[i];
       const waybillId = uid("wb");
-      const base = i * 8;
+      const base = waybillParams.length;
       waybillValues.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`);
       waybillParams.push(
         waybillId,
@@ -133,11 +140,13 @@ export async function POST(req: NextRequest) {
         batchId
       );
 
+      const myItems: string[] = [];
+      const myParams: any[] = [];
       if (wb.items && Array.isArray(wb.items)) {
         for (const item of wb.items) {
-          const bi = itemParams.length;
-          itemValues.push(`($${bi + 1}, $${bi + 2}, $${bi + 3}, $${bi + 4}, $${bi + 5}, $${bi + 6})`);
-          itemParams.push(
+          const bi = myParams.length;
+          myItems.push(`($${bi + 1}, $${bi + 2}, $${bi + 3}, $${bi + 4}, $${bi + 5}, $${bi + 6})`);
+          myParams.push(
             uid("item"),
             waybillId,
             item.sku_code || "",
@@ -147,9 +156,20 @@ export async function POST(req: NextRequest) {
           );
         }
       }
+      plannedItems.push({ itemValues: myItems, itemParams: myParams });
+
+      // 达到 waybill 批次阈值，先刷一批
+      if (waybillValues.length >= WAYBILL_CHUNK) {
+        await query(
+          `INSERT INTO waybills (id, external_code, store_name, receiver_name, receiver_phone, receiver_address, remark, batch_id) VALUES ${waybillValues.join(", ")}`,
+          waybillParams
+        );
+        waybillValues.length = 0;
+        waybillParams.length = 0;
+      }
     }
 
-    // 批量插入运单
+    // 刷剩余 waybill
     if (waybillValues.length > 0) {
       await query(
         `INSERT INTO waybills (id, external_code, store_name, receiver_name, receiver_phone, receiver_address, remark, batch_id) VALUES ${waybillValues.join(", ")}`,
@@ -157,11 +177,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 批量插入物品
-    if (itemValues.length > 0) {
+    // 批量插入物品（按 ITEM_CHUNK 切片）
+    let curValues: string[] = [];
+    let curParams: any[] = [];
+    for (const { itemValues: iv, itemParams: ip } of plannedItems) {
+      for (let i = 0; i < iv.length; i++) {
+        const offset = curParams.length;
+        curValues.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`);
+        curParams.push(...ip.slice(i * 6, (i + 1) * 6));
+        if (curValues.length >= ITEM_CHUNK) {
+          await query(
+            `INSERT INTO order_items (id, waybill_id, sku_code, sku_name, quantity, spec) VALUES ${curValues.join(", ")}`,
+            curParams
+          );
+          curValues = [];
+          curParams = [];
+        }
+      }
+    }
+    if (curValues.length > 0) {
       await query(
-        `INSERT INTO order_items (id, waybill_id, sku_code, sku_name, quantity, spec) VALUES ${itemValues.join(", ")}`,
-        itemParams
+        `INSERT INTO order_items (id, waybill_id, sku_code, sku_name, quantity, spec) VALUES ${curValues.join(", ")}`,
+        curParams
       );
     }
 

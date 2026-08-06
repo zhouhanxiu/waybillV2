@@ -1,3 +1,5 @@
 allowBuilds:
-  sharp: set this to true or false
-  unrs-resolver: set this to true or false
+  esbuild: true
+  msgpackr-extract: true
+  sharp: true
+  unrs-resolver: true
