@@ -105,11 +105,15 @@ async function fastReadRows(buffer: Buffer, fileType: string): Promise<any[][]> 
     return readPdf(buffer as unknown as ArrayBuffer);
   }
   const XLSX = require("xlsx");
-  const wb = XLSX.read(buffer, { type: "array", bookFiles: false });
+  // Buffer -> Uint8Array 兼容性处理
+  const arr = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  const wb = XLSX.read(arr, { type: "array", bookFiles: false });
   const sn = wb.SheetNames[0];
   if (!sn) return [];
   const ws = wb.Sheets[sn];
-  return XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", blankrows: false });
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", blankrows: false });
+  console.log(`[fastReadRows] fileType=${fileType} bufferLen=${buffer.length} sheet="${sn}" rows=${rows.length}`);
+  return rows;
 }
 
 export async function runImport(buffer: Buffer, fileName: string, fileType: string, ruleId: string | null) {
@@ -131,6 +135,7 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
     return NextResponse.json({ error: `文件解析失败: ${err.message}` }, { status: 422 });
   }
 
+  console.log(`[runImport] rawRows.length=${rawRows?.length}, isArray=${Array.isArray(rawRows)}, rawRows[0]=${JSON.stringify(rawRows?.[0])}, rawRows[1]=${JSON.stringify(rawRows?.[1])}`);
   if (!Array.isArray(rawRows) || rawRows.length <= 1) {
     return NextResponse.json({ error: "文件中未解析出任何数据行" }, { status: 422 });
   }
