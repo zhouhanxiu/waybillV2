@@ -113,6 +113,8 @@ async function fastReadRows(buffer: Buffer, fileType: string): Promise<any[][]> 
   const ws = wb.Sheets[sn];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", blankrows: false });
   console.log(`[fastReadRows] fileType=${fileType} bufferLen=${buffer.length} sheet="${sn}" rows=${rows.length}`);
+  // 主动释放 workbook 引用，帮助 GC
+  wb.SheetNames.length = 0;
   return rows;
 }
 
@@ -146,6 +148,8 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   }
 
   const parsed = parseFile(rawRows, rule);
+  // 立即释放 rawRows（大数组），减少内存压力
+  rawRows.length = 0;
   const rows = parsed.rows;
   if (rows.length === 0) {
     return NextResponse.json({ error: "文件中未解析出任何数据行" }, { status: 422 });
