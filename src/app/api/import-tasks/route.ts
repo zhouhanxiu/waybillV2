@@ -135,15 +135,16 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
     return NextResponse.json({ error: `文件解析失败: ${err.message}` }, { status: 422 });
   }
 
-  console.log(`[runImport] rawRows.length=${rawRows?.length}, isArray=${Array.isArray(rawRows)}, rawRows[0]=${JSON.stringify(rawRows?.[0])}, rawRows[1]=${JSON.stringify(rawRows?.[1])}`);
+  const rawInfo = { rawLen: rawRows?.length, isArr: Array.isArray(rawRows), hdr: rawRows?.[0], row1: rawRows?.[1]?.slice?.(0, 3), bufferLen: buffer?.length };
+  console.log(`[runImport] ${JSON.stringify(rawInfo)}`);
   if (!Array.isArray(rawRows) || rawRows.length <= 1) {
-    return NextResponse.json({ error: "文件中未解析出任何数据行" }, { status: 422 });
+    return NextResponse.json({ error: "文件中未解析出任何数据行", debug: rawInfo }, { status: 422 });
   }
 
   const parsed = parseFile(rawRows, rule);
   const rows = parsed.rows;
   if (rows.length === 0) {
-    return NextResponse.json({ error: "文件中未解析出任何数据行" }, { status: 422 });
+    return NextResponse.json({ error: "文件中未解析出任何数据行", debug: { parsedRows: rows.length, rawRows: rawRows.length, warnings: parsed.warnings } }, { status: 422 });
   }
 
   // 3. 切片
