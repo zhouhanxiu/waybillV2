@@ -128,7 +128,10 @@ export async function processUnit(
   }
 
   // ── 阶段2：批量 SKU 校验（考试重点：IN 批量，非逐行）──
-  const skuSet = Array.from(new Set(validRows.map((r) => r.row.skuCode).filter(Boolean)));
+  // parsed 的字段是小写+下划线格式（sku_code），兼容驼峰 skuCode
+  const skuSet = Array.from(
+    new Set(validRows.map((r) => r.row.sku_code ?? r.row.skuCode).filter(Boolean))
+  );
   const validSkus = new Set<string>();
   let degraded = false;
 
@@ -175,20 +178,24 @@ export async function processUnit(
 
   // SKU 未命中 → 行级错误 E003，并从 validRows 剔除
   for (const { row, lineNo } of validRows) {
-    if (row.skuCode && !validSkus.has(row.skuCode)) {
+    const sku = row.sku_code ?? row.skuCode;
+    if (sku && !validSkus.has(sku)) {
       rowErrors.push({
         lineNo,
         rowIndex: validRows.findIndex((r) => r.row === row),
         code: "E003",
         field: "skuCode",
-        message: `SKU 不存在于主数据: ${row.skuCode}`,
-        sku: row.skuCode,
-        ext: row.externalCode,
+        message: `SKU 不存在于主数据: ${sku}`,
+        sku,
+        ext: row.external_code ?? row.externalCode,
         raw: row,
       });
     }
   }
-  const finalValid = validRows.filter((r) => !r.row.skuCode || validSkus.has(r.row.skuCode));
+  const finalValid = validRows.filter((r) => {
+    const s = r.row.sku_code ?? r.row.skuCode;
+    return !s || validSkus.has(s);
+  });
 
   // ── 阶段3：批量 UPSERT（幂等写入 waybills）──
   let upserted = 0;
@@ -290,43 +297,49 @@ async function batchUpsertWaybills(rows: any[], taskId: string): Promise<number>
     "line_no",
     "raw_data",
   ];
-  const values: any[] = [];
-  const placeholders: string[] = [];
-  let p = 1;
   const batchId = `task-${taskId}`;
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    const raw = JSON.stringify(r);
-    const tuple = [
-      r.externalCode ?? r.external_code ?? null,
-      r.storeName ?? r.store_name ?? null,
-      r.receiverName ?? r.receiver_name ?? null,
-      r.receiverPhone ?? r.receiver_phone ?? null,
-      r.receiverAddress ?? r.receiver_address ?? null,
-      r.skuCode ?? r.sku_code ?? null,
-      r.skuName ?? r.sku_name ?? null,
-      r.quantity ?? null,
-      r.senderName ?? r.sender_name ?? null,
-      r.senderPhone ?? r.sender_phone ?? null,
-      batchId,
-      "pending",
-      i + 1,
-      raw,
-    ];
-    tuple.forEach((v) => values.push(v));
-    placeholders.push("(" + tuple.map(() => `$${p++}`).join(",") + ")");
+  // 分批写入：PostgreSQL 单条 SQL 参数上限 65534，1万行×14列会超限，按 CHUNK 切分
+  const CHUNK = 1000;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const part = rows.slice(i, i + CHUNK);
+    const values: any[] = [];
+    const placeholders: string[] = [];
+    let p = 1;
+    for (let j = 0; j < part.length; j++) {
+      const r = part[j];
+      const raw = JSON.stringify(r);
+      // line_no 基于全局行号（i+j+1），保证跨批幂等键稳定
+      const tuple = [
+        r.externalCode ?? r.external_code ?? null,
+        r.storeName ?? r.store_name ?? null,
+        r.receiverName ?? r.receiver_name ?? null,
+        r.receiverPhone ?? r.receiver_phone ?? null,
+        r.receiverAddress ?? r.receiver_address ?? null,
+        r.skuCode ?? r.sku_code ?? null,
+        r.skuName ?? r.sku_name ?? null,
+        r.quantity ?? null,
+        r.senderName ?? r.sender_name ?? null,
+        r.senderPhone ?? r.sender_phone ?? null,
+        batchId,
+        "pending",
+        i + j + 1,
+        raw,
+      ];
+      tuple.forEach((v) => values.push(v));
+      placeholders.push("(" + tuple.map(() => `$${p++}`).join(",") + ")");
+    }
+    const colList = cols.join(", ");
+    const updateCols = cols
+      .filter((c) => c !== "external_code" && c !== "sku_code" && c !== "batch_id")
+      .map((c) => `${c} = EXCLUDED.${c}`)
+      .join(", ");
+    await query(
+      `INSERT INTO waybills (${colList}) VALUES ${placeholders.join(",")}
+       ON CONFLICT (COALESCE(external_code,''), COALESCE(sku_code,''), COALESCE(batch_id,''))
+       DO UPDATE SET ${updateCols}, updated_at = NOW(), raw_data = EXCLUDED.raw_data`,
+      values
+    );
   }
-  const colList = cols.join(", ");
-  const updateCols = cols
-    .filter((c) => c !== "external_code" && c !== "sku_code" && c !== "batch_id")
-    .map((c) => `${c} = EXCLUDED.${c}`)
-    .join(", ");
-  await query(
-    `INSERT INTO waybills (${colList}) VALUES ${placeholders.join(",")}
-     ON CONFLICT (COALESCE(external_code,''), COALESCE(sku_code,''), COALESCE(batch_id,''))
-     DO UPDATE SET ${updateCols}, updated_at = NOW(), raw_data = EXCLUDED.raw_data`,
-    values
-  );
   return rows.length;
 }
 
@@ -364,12 +377,18 @@ async function insertRowErrors(
       e.ext ?? null
     );
   }
-  await query(
-    `INSERT INTO import_task_errors
-       (task_id, unit_id, row_index, line_no, error_code, error_field, error_message, raw_data, masked_data, sku_code, waybill_external_code)
-     VALUES ${placeholders.join(",")}`,
-    values
-  );
+  // 分批写入（11列 × 行数，防止超 65534 参数上限）
+  const CHUNK = 5000;
+  for (let i = 0; i < placeholders.length; i += CHUNK) {
+    const ph = placeholders.slice(i, i + CHUNK);
+    const v = values.slice(i * 11, (i + CHUNK) * 11);
+    await query(
+      `INSERT INTO import_task_errors
+         (task_id, unit_id, row_index, line_no, error_code, error_field, error_message, raw_data, masked_data, sku_code, waybill_external_code)
+       VALUES ${ph.join(",")}`,
+      v
+    );
+  }
 }
 
 function maskRaw(raw: any): any {
