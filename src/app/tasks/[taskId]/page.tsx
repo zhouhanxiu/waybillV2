@@ -79,6 +79,20 @@ export default function TaskDetailPage() {
         </div>
       </div>
 
+      {/* 降级模式标注（考试模块十：明确告知用户已进入降级模式） */}
+      {task.degraded && (
+        <div className="flex items-start gap-3 mb-6 px-4 py-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-800">
+          <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
+          <div className="text-sm leading-relaxed">
+            <div className="font-semibold">⚠️ 本任务已进入降级模式（Degraded Mode）</div>
+            <div className="mt-1 text-amber-700">
+              由于 SKU 主数据校验服务超时（&gt;3s）或不可用，系统已自动降级：跳过逐行 SKU 强校验、放行写入运单主表，
+              以保证导入吞吐与可用性。降级期间写入的运单未做 SKU 主数据一致性校验，请在恢复后复核。
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 进度卡 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <Stat label="总进度" value={`${pct}%`} icon={<Layers className="w-4 h-4" />} />
