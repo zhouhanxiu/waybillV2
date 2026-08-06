@@ -163,6 +163,9 @@ export async function migrateV4(): Promise<void> {
       span_id TEXT,
       service TEXT DEFAULT 'worker',
       status TEXT DEFAULT 'ok',  -- ok|error|degraded
+      level TEXT DEFAULT 'info',  -- debug|info|warn|error (导入流程 emitTrace 使用)
+      message TEXT,              -- 导入流程 emitTrace 使用
+      "timestamp" TIMESTAMP DEFAULT NOW(),  -- 导入流程 emitTrace 使用
       started_at TIMESTAMP NOT NULL DEFAULT NOW(),
       ended_at TIMESTAMP,
       duration_ms BIGINT,
@@ -174,6 +177,10 @@ export async function migrateV4(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_trace_task ON trace_events(task_id, started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_trace_id ON trace_events(trace_id, started_at);
   `);
+  // 兼容已存在旧表（缺少新增列时补列）
+  await query(`ALTER TABLE trace_events ADD COLUMN IF NOT EXISTS level TEXT DEFAULT 'info';`);
+  await query(`ALTER TABLE trace_events ADD COLUMN IF NOT EXISTS message TEXT;`);
+  await query(`ALTER TABLE trace_events ADD COLUMN IF NOT EXISTS "timestamp" TIMESTAMP DEFAULT NOW();`);
 
   // 8. waybills 扩展列（V4 行级运单导入：向后兼容 V2 现有列，仅新增 SKU 维度字段）
   await query(`

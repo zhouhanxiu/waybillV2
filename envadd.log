@@ -1,0 +1,17 @@
+﻿node.exe : npm warn Unknown project config "node-linker". This will stop working in the next major version of npm. See 
+`npm help npmrc` for supported config options.
+所在位置 C:\nvm4w\nodejs\npx.ps1:28 字符: 12
++   $input | & $NODE_EXE $NPX_CLI_JS $args
++            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm warn Unknow...config options.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Vercel CLI 58.7.1 (Node.js 24.14.1)
+Retrieving project…
+> Removed trailing newline from stdin input
+Saving…
+
+✓ Added           APP_BASE_URL
+  Project         zhous-projects-daecd222/20260704155001
+  Environments    Production
+  Type            Sensitive
