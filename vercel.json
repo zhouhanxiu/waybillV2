@@ -1,9 +1,3 @@
 {
-  "crons": [
-    {
-      "path": "/api/worker/cron",
-      "schedule": "0 * * * *"
-    }
-  ],
   "installCommand": "echo 'node-linker=hoisted' > .npmrc && pnpm install --no-frozen-lockfile"
 }
