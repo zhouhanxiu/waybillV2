@@ -176,9 +176,12 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
       const unitId = `${taskId}-u${i}`;
       const start = i * UNIT_ROW_LIMIT;
       const end = Math.min(start + UNIT_ROW_LIMIT, totalRows);
+      // 直接序列化切片，不保留切片引用
       const unitRows = rows.slice(start, end);
       const payloadB64 = Buffer.from(JSON.stringify(unitRows), "utf-8").toString("base64");
       unitPayloads.push({ unitId, payloadB64 });
+      // 序列化后清除切片引用，帮助 GC
+      unitRows.length = 0;
 
       await tx.unsafe(
         `INSERT INTO import_task_batches
