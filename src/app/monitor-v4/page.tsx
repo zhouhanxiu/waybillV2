@@ -51,9 +51,7 @@ export default function MonitorV4Page() {
     return () => clearInterval(t);
   }, [load]);
 
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-jingtian" /></div>;
-  if (!data && !phase) return <div className="text-center py-20 text-ink-soft">无数据</div>;
-
+  const hasData = !!(data || phase);
   const t = data?.tasks || {};
   const p = data?.performance || {};
   const totalRows = t.total_rows || 0;
@@ -89,6 +87,17 @@ export default function MonitorV4Page() {
         <Card label="已处理单元" value={p.units ?? 0} />
         <Card label="累计处理行" value={p.rows_processed ?? 0} />
       </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 mb-4 text-sm text-ink-soft">
+          <Loader2 className="w-4 h-4 animate-spin text-jingtian" /> 加载中…
+        </div>
+      )}
+      {!loading && !hasData && (
+        <div className="mb-4 rounded-lg border border-dashed border-line bg-bg/50 px-4 py-3 text-sm text-ink-soft">
+          暂无监控数据。请先上传 Excel 运行一次导入任务，QStash 队列消费完成后此处会展示实时指标。
+        </div>
+      )}
 
       {/* Tab 切换 */}
       <div className="flex gap-2 mb-4 border-b border-line flex-wrap">
