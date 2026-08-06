@@ -12,7 +12,7 @@
  * 不再依赖内存队列存活或 cron 兜底（cron 仍保留作最终兜底）。
  */
 import { NextRequest, NextResponse } from "next/server";
-import { verifySignature } from "@upstash/qstash";
+import { Receiver } from "@upstash/qstash";
 import { processUnit } from "@/lib/worker/processUnit";
 
 export const runtime = "nodejs";
@@ -27,12 +27,11 @@ export async function POST(req: NextRequest) {
   }
   let job: { taskId: string; unitId: string; unitIndex: number };
   try {
-    const valid = await verifySignature({
-      signature,
-      body: rawBody,
-      currentSigningKey: process.env.QSTASH_CURRENT_SIGNING_KEY,
-      nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY || process.env.QSTASH_CURRENT_SIGNING_KEY,
+    const receiver = new Receiver({
+      currentSigningKey: process.env.QSTASH_CURRENT_SIGNING_KEY!,
+      nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY || process.env.QSTASH_CURRENT_SIGNING_KEY!,
     });
+    const valid = await receiver.verify({ signature, body: rawBody });
     if (!valid) {
       return NextResponse.json({ error: "invalid signature" }, { status: 401 });
     }
