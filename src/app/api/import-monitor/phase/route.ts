@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getDb } from "@/lib/db";
 
 /**
  * 分阶段耗时 + 错误码分布 + 慢批次 + 队列积压 监控接口（考试要求：每步骤过程/耗时可观测）
@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
  * 可选 ?taskId= 仅看某个任务
  */
 export async function GET(req: NextRequest) {
-  const dbc = db;
+  const dbc = getDb();
   const taskId = req.nextUrl.searchParams.get("taskId");
   const where = taskId ? `WHERE task_id = $1` : "";
   const params = taskId ? [taskId] : [];
