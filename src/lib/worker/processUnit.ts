@@ -17,6 +17,7 @@
  *   上传接口：解析整个文件 → 切片成单元 → 单元行数据写入 import_task_batches.unit_payload
  *   Worker   ：读取单元行数据 → 校验 → 批量 SKU → 批量 UPSERT → 错误/性能/Trace
  */
+import { randomUUID } from "crypto";
 import { query } from "../db";
 import { validateWaybill } from "../validation";
 
@@ -282,6 +283,7 @@ async function batchCheckSkus(skus: string[]): Promise<Set<string>> {
 async function batchUpsertWaybills(rows: any[], taskId: string): Promise<number> {
   if (rows.length === 0) return 0;
   const cols = [
+    "id",
     "external_code",
     "store_name",
     "receiver_name",
@@ -310,6 +312,7 @@ async function batchUpsertWaybills(rows: any[], taskId: string): Promise<number>
       const raw = JSON.stringify(r);
       // line_no 基于全局行号（i+j+1），保证跨批幂等键稳定
       const tuple = [
+        randomUUID(),
         r.externalCode ?? r.external_code ?? null,
         r.storeName ?? r.store_name ?? null,
         r.receiverName ?? r.receiver_name ?? null,
@@ -331,7 +334,7 @@ async function batchUpsertWaybills(rows: any[], taskId: string): Promise<number>
     const colList = cols.join(", ");
     // 排除冲突键（external_code/sku_code/batch_id）与末尾显式追加的 raw_data，避免重复的 SET 列
     const updateCols = cols
-      .filter((c) => c !== "external_code" && c !== "sku_code" && c !== "batch_id" && c !== "raw_data")
+      .filter((c) => c !== "id" && c !== "external_code" && c !== "sku_code" && c !== "batch_id" && c !== "raw_data")
       .map((c) => `${c} = EXCLUDED.${c}`)
       .join(", ");
     await query(
