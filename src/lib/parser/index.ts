@@ -95,7 +95,7 @@ export function parseRows(
 ): { rows: ParsedRow[]; warnings: string[] } {
   const cfg = rule.config;
   const structure = cfg.structure || {};
-  const mappings = cfg.fieldMappings;
+  const mappings = cfg.fieldMappings || [];
   const warnings: string[] = [];
   const rows: ParsedRow[] = [];
 
@@ -326,7 +326,7 @@ function applyMatrixTranspose(
 
   // 应用非列映射的字段（如 static）
   for (const row of rows) {
-    for (const m of rule.config.fieldMappings) {
+    for (const m of rule.config.fieldMappings || []) {
       if (m.source === "static") {
         (row as any)[m.target] = m.value;
       }
