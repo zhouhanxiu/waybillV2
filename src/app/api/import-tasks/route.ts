@@ -123,7 +123,10 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   let rule: ParseRule | undefined;
   if (ruleId) {
     const r = await query<{ config: any }>(`SELECT config FROM import_rules WHERE id=$1`, [ruleId]);
-    if (r[0]) rule = { id: ruleId, config: r[0].config } as ParseRule;
+    if (r[0]) {
+      rule = { id: ruleId, config: typeof r[0].config === 'string' ? JSON.parse(r[0].config) : r[0].config } as ParseRule;
+      console.log(`[runImport] rule config type=${typeof r[0].config}, engine=${rule.config.engine}, mappingsLen=${rule.config.fieldMappings?.length}, structure=${JSON.stringify(rule.config.structure)}`);
+    }
   }
   if (!rule) rule = defaultRule();
 
@@ -144,7 +147,7 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   const parsed = parseFile(rawRows, rule);
   const rows = parsed.rows;
   if (rows.length === 0) {
-    return NextResponse.json({ error: "文件中未解析出任何数据行", debug: { parsedRows: rows.length, rawRows: rawRows.length, warnings: parsed.warnings } }, { status: 422 });
+    return NextResponse.json({ error: "文件中未解析出任何数据行", debug: { parsedRows: rows.length, rawRows: rawRows.length, warnings: parsed.warnings, ruleEngine: rule.config.engine, mappingsLen: rule.config.fieldMappings?.length, dataStartRow: rule.config.structure?.dataStartRow } }, { status: 422 });
   }
 
   // 3. 切片
