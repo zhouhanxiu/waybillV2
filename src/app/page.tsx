@@ -159,7 +159,7 @@ export default function ImportV4Page() {
       }
       let data: any = {};
       try { data = await res.json(); } catch {}
-      if (!res.ok) throw new Error(data?.error || `提交失败 HTTP ${res.status}`);
+      if (!res.ok) throw new Error(data?.detail || data?.error || `提交失败 HTTP ${res.status}`);
       setResult({
         taskId: data?.taskId || data?.task_id || "",
         totalRows: data?.totalRows ?? data?.total_rows ?? 0,
