@@ -35,6 +35,8 @@ export default function ImportV4Page() {
   const [rules, setRules] = useState<RuleItem[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<{ taskId: string; totalRows: number; totalUnits: number; traceId: string; acceptedInMs: number } | null>(null);
+  const [showRuleSelector, setShowRuleSelector] = useState(false);
+  const [presetRuleId, setPresetRuleId] = useState<string>("");
   const dropRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -106,6 +108,21 @@ export default function ImportV4Page() {
     if (f) handleFile(f);
   };
 
+  // 直接导入：上传文件 + 已有 ruleId，跳过 AI 直接提交
+  const handleDirectFile = useCallback(async (f: File, ruleId: string) => {
+    if (!ruleId) {
+      setErr("请先选择规则");
+      return;
+    }
+    setErr(null);
+    setFile(f);
+    setFileName(f.name);
+    setChosenRuleId(ruleId);
+    // 跳过 AI 分析，直接进入 analyzed 阶段，让用户确认后提交
+    setAnalysis(null);
+    setPhase("analyzed");
+  }, []);
+
   const submitImport = useCallback(async () => {
     if (!file) return;
     setErr(null);
@@ -117,7 +134,15 @@ export default function ImportV4Page() {
       if (chosenRuleId && !chosenRuleId.startsWith("new:")) {
         fd.append("ruleId", chosenRuleId);
       }
-      const res = await fetch("/api/import-tasks", { method: "POST", body: fd });
+      // 90秒超时（Vercel Serverless 冷启动可能慢，但最多 60s，超时给更宽容的边界）
+      const ctrl = new AbortController();
+      const timeout = setTimeout(() => ctrl.abort(), 90000);
+      let res: Response;
+      try {
+        res = await fetch("/api/import-tasks", { method: "POST", body: fd, signal: ctrl.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
       let data: any = {};
       try { data = await res.json(); } catch {}
       if (!res.ok) throw new Error(data?.error || `提交失败 HTTP ${res.status}`);
@@ -132,7 +157,11 @@ export default function ImportV4Page() {
       const tid = data?.taskId || data?.task_id;
       if (tid) setTimeout(() => router.push(`/tasks/${tid}`), 1200);
     } catch (e: any) {
-      setErr(e?.message || "提交失败");
+      if (e?.name === "AbortError") {
+        setErr("请求超时（>90秒）。服务器可能正在冷启动，请稍后到「导入任务」查看是否已创建。");
+      } else {
+        setErr(e?.message || "提交失败");
+      }
       setPhase("analyzed");
     }
   }, [file, chosenRuleId, router]);
@@ -190,29 +219,47 @@ export default function ImportV4Page() {
         <div className="bg-white rounded-2xl border border-line p-6">
           {/* 标题行 */}
           <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="w-5 h-5 text-jingtian" />
-            <h2 className="text-lg font-bold text-ink">AI 识别结果</h2>
-            {isExistingRule ? (
-              <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">
-                已选已有规则 · 跳过 AI
-              </span>
+            {analysis ? (
+              <>
+                <Sparkles className="w-5 h-5 text-jingtian" />
+                <h2 className="text-lg font-bold text-ink">AI 识别结果</h2>
+                {isExistingRule ? (
+                  <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">
+                    已选已有规则 · 跳过 AI
+                  </span>
+                ) : (
+                  <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
+                    analysis?.source === "matched" ? "bg-green-100 text-green-700" :
+                    analysis?.source === "local" ? "bg-amber-100 text-amber-700" :
+                    "bg-jingtian-soft text-jingtian-dark"
+                  }`}>
+                    {analysis?.source === "matched" ? "命中已有规则" : analysis?.source === "local" ? "本地兜底规则" : "AI 推断"}
+                  </span>
+                )}
+              </>
             ) : (
-              <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
-                analysis?.source === "matched" ? "bg-green-100 text-green-700" :
-                analysis?.source === "local" ? "bg-amber-100 text-amber-700" :
-                "bg-jingtian-soft text-jingtian-dark"
-              }`}>
-                {analysis?.source === "matched" ? "命中已有规则" : analysis?.source === "local" ? "本地兜底规则" : "AI 推断"}
-              </span>
+              <>
+                <BookOpen className="w-5 h-5 text-amber-500" />
+                <h2 className="text-lg font-bold text-ink">直接导入</h2>
+                <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                  跳过 AI 分析
+                </span>
+              </>
             )}
           </div>
 
-          {/* 文件信息 */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
+          {/* 文件信息（直接导入模式不显示 AI 推荐信息） */}
+          <div className={`grid ${analysis ? "grid-cols-2" : "grid-cols-1"} gap-3 mb-4`}>
             <Field label="文件名" value={fileName} />
-            <Field label="文件类型" value={(analysis?.fileType || "—").toString().toUpperCase()} />
-            <Field label="建议规则名" value={analysis?.name || "—"} />
-            <Field label="置信度" value={analysis?.confidence ? `${(analysis.confidence * 100).toFixed(0)}%` : "—"} />
+            {analysis ? (
+              <>
+                <Field label="文件类型" value={(analysis.fileType || "—").toString().toUpperCase()} />
+                <Field label="建议规则名" value={analysis.name || "—"} />
+                <Field label="置信度" value={analysis.confidence ? `${(analysis.confidence * 100).toFixed(0)}%` : "—"} />
+              </>
+            ) : (
+              <Field label="选定规则" value={rules.find(r => r.id === chosenRuleId)?.name || "—"} />
+            )}
           </div>
 
           {/* 规则选择下拉框 */}
@@ -227,13 +274,17 @@ export default function ImportV4Page() {
                 disabled={phase === "submitting"}
                 className="w-full appearance-none border border-line rounded-lg px-3 py-2 pr-8 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-jingtian"
               >
-                <option value={`new:${analysis?.name || "新规则"}`}>
-                  ✨ AI 推断的新规则（{analysis?.name || "未命名"}）
-                </option>
-                <option disabled>──────────────</option>
+                {analysis ? (
+                  <>
+                    <option value={`new:${analysis.name || "新规则"}`}>
+                      ✨ AI 推断的新规则（{analysis.name || "未命名"}）
+                    </option>
+                    <option disabled>──────────────</option>
+                  </>
+                ) : null}
                 {rules.map((r) => (
                   <option key={r.id} value={r.id}>
-                    📋 {r.name}{r.name === analysis?.name ? " （与 AI 推荐一致）" : ""}
+                    📋 {r.name}{analysis && r.name === analysis.name ? " （与 AI 推荐一致）" : ""}
                   </option>
                 ))}
               </select>
@@ -247,7 +298,7 @@ export default function ImportV4Page() {
           </div>
 
           {/* 字段映射预览（仅 AI 新规则时显示） */}
-          {!isExistingRule && analysis?.config && (
+          {analysis && !isExistingRule && analysis?.config && (
             <details className="mb-4 text-sm">
               <summary className="cursor-pointer text-ink-soft flex items-center gap-1">
                 <Eye className="w-3 h-3" /> 查看 AI 推断的字段映射
@@ -285,32 +336,120 @@ export default function ImportV4Page() {
           </div>
         </div>
       ) : (
-        /* ---- 上传区域 ---- */
-        <div
-          ref={dropRef}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={onDrop}
-          className={`bg-white rounded-2xl border-2 border-dashed p-12 text-center transition-colors ${
-            phase === "analyzing" ? "border-jingtian bg-jingtian-soft" : "border-line hover:border-jingtian hover:bg-bg"
-          }`}
-        >
-          {phase === "analyzing" ? (
-            <div className="flex flex-col items-center">
-              <Loader2 className="w-12 h-12 text-jingtian animate-spin mb-4" />
-              <p className="text-ink font-medium">AI 正在分析文件结构…</p>
-              <p className="text-xs text-ink-soft mt-2">通常 1~3 秒</p>
+        /* ---- 入口区：先选规则 或 直接上传 ---- */
+        <div className="space-y-4">
+          {/* 选项卡：先选已有规则 / AI 智能识别 */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowRuleSelector(true)}
+              type="button"
+              className="flex-1 py-3 rounded-xl border border-line bg-white hover:bg-bg text-left px-4 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-jingtian" />
+                <div>
+                  <div className="font-semibold text-ink text-sm">先选已有规则</div>
+                  <div className="text-xs text-ink-soft">跳过 AI，直接导入 ≤1秒</div>
+                </div>
+              </div>
+            </button>
+            <button
+              onClick={() => setShowRuleSelector(false)}
+              type="button"
+              className="flex-1 py-3 rounded-xl border border-line bg-white hover:bg-bg text-left px-4 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-jingtian" />
+                <div>
+                  <div className="font-semibold text-ink text-sm">AI 智能识别</div>
+                  <div className="text-xs text-ink-soft">上传后自动分析</div>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          {/* 模式 A：先选规则 */}
+          {showRuleSelector ? (
+            <div className="bg-white rounded-2xl border border-line p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <BookOpen className="w-5 h-5 text-jingtian" />
+                <h2 className="text-lg font-bold text-ink">先选已有规则（跳过 AI）</h2>
+              </div>
+              <p className="text-sm text-ink-soft mb-4">选好规则后上传文件，提交将直接走该规则，≤1秒返回 taskId</p>
+
+              <label className="block text-xs font-semibold text-ink mb-1">选择规则</label>
+              <div className="relative mb-3">
+                <select
+                  value={presetRuleId}
+                  onChange={(e) => setPresetRuleId(e.target.value)}
+                  className="w-full appearance-none border border-line rounded-lg px-3 py-2 pr-8 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-jingtian"
+                >
+                  <option value="">-- 请选择已有规则 --</option>
+                  {rules.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      📋 {r.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 absolute right-2 top-3 text-ink-soft pointer-events-none" />
+              </div>
+
+              {presetRuleId && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800 mb-4">
+                  ✅ 已选规则：<span className="font-mono">{rules.find(r => r.id === presetRuleId)?.name}</span>
+                </div>
+              )}
+
+              <label className={`w-full block px-5 py-3 rounded-xl text-center text-sm font-medium transition-colors ${
+                presetRuleId
+                  ? "bg-jingtian text-white hover:bg-jingtian-dark cursor-pointer"
+                  : "bg-gray-200 text-gray-500 cursor-not-allowed"
+              }`}>
+                <Upload className="w-4 h-4 inline mr-1" />
+                {presetRuleId ? "选择文件并直接导入（≤1秒）" : "请先选择规则"}
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv,.pdf"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f && presetRuleId) {
+                      handleDirectFile(f, presetRuleId);
+                    }
+                  }}
+                  disabled={!presetRuleId}
+                  className="hidden"
+                />
+              </label>
             </div>
           ) : (
-            <div className="flex flex-col items-center">
-              <Upload className="w-12 h-12 text-jingtian mb-4" />
-              <p className="text-ink mb-2 font-medium">拖拽文件到此，或点击选择</p>
-              <p className="text-sm text-ink-soft mb-1">AI 自动识别列结构，也可在下拉框选已有规则跳过 AI</p>
-              <p className="text-sm text-ink-soft mb-4">支持 xlsx / xls / csv / pdf，最大 50MB</p>
-              <label className="px-5 py-2 rounded-lg bg-jingtian text-white text-sm hover:bg-jingtian-dark cursor-pointer">
-                <FileSpreadsheet className="w-4 h-4 inline mr-1" />
-                选择文件
-                <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv,.pdf" onChange={onPick} className="hidden" />
-              </label>
+            /* 模式 B：上传触发 AI */
+            <div
+              ref={dropRef}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={onDrop}
+              className={`bg-white rounded-2xl border-2 border-dashed p-12 text-center transition-colors ${
+                phase === "analyzing" ? "border-jingtian bg-jingtian-soft" : "border-line hover:border-jingtian hover:bg-bg"
+              }`}
+            >
+              {phase === "analyzing" ? (
+                <div className="flex flex-col items-center">
+                  <Loader2 className="w-12 h-12 text-jingtian animate-spin mb-4" />
+                  <p className="text-ink font-medium">AI 正在分析文件结构…</p>
+                  <p className="text-xs text-ink-soft mt-2">通常 1~3 秒</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center">
+                  <Upload className="w-12 h-12 text-jingtian mb-4" />
+                  <p className="text-ink mb-2 font-medium">拖拽文件到此，或点击选择</p>
+                  <p className="text-sm text-ink-soft mb-1">上传后 AI 自动识别，下拉框可切换已有规则</p>
+                  <p className="text-sm text-ink-soft mb-4">支持 xlsx / xls / csv / pdf，最大 50MB</p>
+                  <label className="px-5 py-2 rounded-lg bg-jingtian text-white text-sm hover:bg-jingtian-dark cursor-pointer">
+                    <FileSpreadsheet className="w-4 h-4 inline mr-1" />
+                    选择文件
+                    <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv,.pdf" onChange={onPick} className="hidden" />
+                  </label>
+                </div>
+              )}
             </div>
           )}
         </div>
