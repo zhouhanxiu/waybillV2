@@ -206,7 +206,7 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   }
 
   const elapsed = Date.now() - t0;
-  console.log(JSON.stringify({ stage: "import.accepted", taskId, acceptedInMs: elapsed, backend: useQstash ? "qstash" : "sync" }));
+  console.log(JSON.stringify({ stage: "import.accepted", taskId, acceptedInMs: elapsed, backend: useQstash ? "qstash" : "sync", envBackend: process.env.QUEUE_BACKEND, unitRows: units[0]?.unitRows?.length }));
   return NextResponse.json({
     taskId,
     traceId,
