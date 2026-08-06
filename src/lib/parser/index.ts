@@ -493,7 +493,7 @@ export function splitCards(
   rule: ParseRule
 ): any[][][] {
   const cfg = rule.config;
-  const marker = cfg.structure.cardStartMarker;
+  const marker = cfg.structure?.cardStartMarker;
   if (!marker) return [rawRows];
 
   const cards: any[][][] = [];
