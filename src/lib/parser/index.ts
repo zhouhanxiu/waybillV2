@@ -94,7 +94,7 @@ export function parseRows(
   sheetName?: string
 ): { rows: ParsedRow[]; warnings: string[] } {
   const cfg = rule.config;
-  const structure = cfg.structure;
+  const structure = cfg.structure || {};
   const mappings = cfg.fieldMappings;
   const warnings: string[] = [];
   const rows: ParsedRow[] = [];
@@ -220,7 +220,7 @@ function applyMatrixTranspose(
   warnings: string[]
 ): { rows: ParsedRow[]; warnings: string[] } {
   const cfg = rule.config;
-  const structure = cfg.structure;
+  const structure = cfg.structure || {};
   const mt = cfg.matrixTranspose!;
 
   const headerIdx = (structure.titleRow ?? 1) - 1;
@@ -345,7 +345,7 @@ function applyTrailingInfo(
   warnings: string[]
 ): void {
   const cfg = rule.config;
-  const structure = cfg.structure;
+  const structure = cfg.structure || {};
   const start = (structure.trailingInfoStart ?? rawRows.length) - 1;
   const end = structure.trailingInfoEnd ?? rawRows.length;
   const tiMappings = cfg.trailingInfo?.mappings || [];
@@ -522,7 +522,7 @@ export function parseFile(
 ): { rows: ParsedRow[]; warnings: string[] } {
   const engine = rule.config.engine || "row";
   const cfg = rule.config;
-  const structure = cfg.structure;
+  const structure = cfg.structure || {};
 
   // 矩阵引擎：直接转置，然后应用 trailingInfo（如果有的话）
   if (engine === "matrix") {
