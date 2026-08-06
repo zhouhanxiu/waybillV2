@@ -14,30 +14,31 @@ export async function GET(req: Request) {
   const latest = searchParams.get("latest") === "1";
 
   let fixture: string | undefined;
+  const fixturesDir = join(/*turbopackIgnore: true*/ process.cwd(), "scripts", "fixtures");
 
   if (fileParam) {
     const safe = fileParam.replace(/[^A-Za-z0-9_.-]/g, "");
-    const p = join(process.cwd(), "scripts", "fixtures", safe);
-    fixture = existsSync(p) ? p : undefined;
+    const p = join(/*turbopackIgnore: true*/ process.cwd(), "scripts", "fixtures", safe);
+    fixture = existsSync(/*turbopackIgnore: true*/ p) ? p : undefined;
     if (!fixture) {
       return NextResponse.json({ error: "file not found: " + safe }, { status: 404 });
     }
   } else if (latest) {
-    const dir = join(process.cwd(), "scripts", "fixtures");
-    const files = readdirSync(dir)
+    const dir = fixturesDir;
+    const files = readdirSync(/*turbopackIgnore: true*/ dir)
       .filter((f) => /^waybills-.*\.xlsx$/.test(f))
-      .map((f) => ({ f, m: statSync(join(dir, f)).mtimeMs }))
+      .map((f) => ({ f, m: statSync(/*turbopackIgnore: true*/ join(dir, f)).mtimeMs }))
       .sort((a, b) => b.m - a.m);
     if (files.length === 0) {
       return NextResponse.json({ error: "no generated fixtures" }, { status: 404 });
     }
-    fixture = join(dir, files[0].f);
+    fixture = join(/*turbopackIgnore: true*/ dir, files[0].f);
   } else {
     const candidates = [
-      join(process.cwd(), "test-data", "10000-orders.xlsx"),
-      join(process.cwd(), "scripts", "fixtures", "waybills-10000.xlsx"),
+      join(/*turbopackIgnore: true*/ process.cwd(), "test-data", "10000-orders.xlsx"),
+      join(/*turbopackIgnore: true*/ process.cwd(), "scripts", "fixtures", "waybills-10000.xlsx"),
     ];
-    fixture = candidates.find((p) => existsSync(p));
+    fixture = candidates.find((p) => existsSync(/*turbopackIgnore: true*/ p));
   }
 
   if (!fixture) {

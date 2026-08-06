@@ -64,7 +64,6 @@ export async function processUnit(
   }
 
   const startedAt = Date.now();
-  console.log(JSON.stringify({ stage: "unit.start", taskId, unitId, attempt, rows: parsed?.length }));
   let parsed: any[];
   try {
     parsed = JSON.parse(Buffer.from(payloadB64, "base64").toString("utf-8"));
@@ -73,6 +72,8 @@ export async function processUnit(
     throw err;
   }
   if (!Array.isArray(parsed)) parsed = [];
+
+  console.log(JSON.stringify({ stage: "unit.start", taskId, unitId, attempt, rows: parsed.length }));
 
   // ── 阶段1：逐行字段校验 + 收集 SKU ──
   // 每条 ParsedRow 视为一个独立运单 + 单 SKU 明细（考试语义：1万行 = 1万条运单明细）
