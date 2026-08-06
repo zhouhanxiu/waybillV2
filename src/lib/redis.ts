@@ -12,19 +12,44 @@
  */
 import { Redis } from "@upstash/redis";
 
+/**
+ * 清理环境变量中的不可见字符。
+ * Vercel 控制台复制粘贴出来的 URL 经常夹带 BOM（U+FEFF）/ 零宽字符（U+200B~U+200D），
+ * Upstash Redis 客户端会因此报 UrlError：Received: "\uFEFF\uFEFFhttps://..."。
+ * 数据库那边在 src/lib/db/index.ts 里已有同样处理，这里保持一致。
+ */
+function sanitizeEnv(raw: string | undefined | null): string {
+  if (!raw) return "";
+  return raw
+    .replace(/^[\uFEFF\u200B\u200C\u200D\s\u00A0]+/g, "")
+    .trim();
+}
+
 let client: Redis | null = null;
+let initFailed = false;
 
 export function getRedis(): Redis | null {
   if (client) return client;
+  if (initFailed) return null; // 已失败过：降级不重试，避免每次请求都抛错
   // 兼容两种变量名前缀：REDIS_REST_* 与 UPSTASH_REDIS_REST_*（控制台默认导出）
-  const url = process.env.REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.REDIS_REST_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = sanitizeEnv(process.env.REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_URL);
+  const token = sanitizeEnv(process.env.REDIS_REST_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN);
   if (!url || !token) {
-    // 未配置：返回 null，调用方降级为"无 Redis"
+    return null; // 未配置：降级为无 Redis
+  }
+  if (!/^https:\/\//i.test(url)) {
+    console.error("[redis] invalid URL scheme (must start with https), degrade:", url.slice(0, 32));
+    initFailed = true;
     return null;
   }
-  client = new Redis({ url, token });
-  return client;
+  try {
+    client = new Redis({ url, token });
+    return client;
+  } catch (err) {
+    console.error("[redis] init failed, degrade to no-redis:", (err as any)?.message);
+    initFailed = true;
+    return null;
+  }
 }
 
 export const REDIS_TTL = parseInt(process.env.REDIS_TTL_SECONDS || "8");

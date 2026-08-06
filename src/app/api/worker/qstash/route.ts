@@ -29,9 +29,12 @@ export async function POST(req: NextRequest) {
   }
   let job: { taskId: string; unitId: string; unitIndex: number };
   try {
+    // 清理 BOM/不可见字符（Vercel 环境变量偶发 \uFEFF 前缀，带 BOM 的签名密钥会验签失败）
+    const clean = (v: string | undefined) =>
+      (v ?? "").replace(/^[\uFEFF\u200B\u200C\u200D\s\u00A0]+|[\uFEFF\u200B\u200C\u200D\s\u00A0]+$/g, "");
     const receiver = new Receiver({
-      currentSigningKey: process.env.QSTASH_CURRENT_SIGNING_KEY!,
-      nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY || process.env.QSTASH_CURRENT_SIGNING_KEY!,
+      currentSigningKey: clean(process.env.QSTASH_CURRENT_SIGNING_KEY),
+      nextSigningKey: clean(process.env.QSTASH_NEXT_SIGNING_KEY) || clean(process.env.QSTASH_CURRENT_SIGNING_KEY),
     });
     const valid = await receiver.verify({ signature, body: rawBody });
     if (!valid) {

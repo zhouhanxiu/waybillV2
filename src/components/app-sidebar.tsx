@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Truck, ListOrdered, Activity, ClipboardList, GitBranch, Gauge } from "lucide-react";
+import { Home, Upload, Truck, ListOrdered, Activity, ClipboardList, GitBranch, Gauge } from "lucide-react";
 
 const navItems = [
-  { href: "/", label: "智能导入", icon: Home },
+  { href: "/", label: "V4 智能导入", icon: Upload },
   { href: "/tasks", label: "导入任务", icon: ClipboardList },
   { href: "/loadtest", label: "压测验证", icon: Gauge },
   { href: "/monitor-v4", label: "监控看板", icon: Activity },
   { href: "/traces", label: "Trace 检索", icon: GitBranch },
   { href: "/waybills", label: "运单列表", icon: Truck },
   { href: "/rules", label: "规则管理", icon: ListOrdered },
+  { href: "/legacy", label: "V2 旧版", icon: Home },
 ];
 
 export function AppSidebar() {

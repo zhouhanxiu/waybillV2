@@ -177,14 +177,14 @@ export async function processUnit(
     console.log(JSON.stringify({ stage: "unit.sku_validate", taskId, unitId, skuCount: skuSet.length, durationMs: dur, degraded }));
   }
 
-  // SKU 未命中 → 行级错误 E003，并从 validRows 剔除
+  // SKU 未命中 → 行级错误 E001（考试：SKU不存在），并从 validRows 剔除
   for (const { row, lineNo } of validRows) {
     const sku = row.sku_code ?? row.skuCode;
     if (sku && !validSkus.has(sku)) {
       rowErrors.push({
         lineNo,
         rowIndex: validRows.findIndex((r) => r.row === row),
-        code: "E003",
+        code: "E001",
         field: "skuCode",
         message: `SKU 不存在于主数据: ${sku}`,
         sku,
@@ -478,28 +478,28 @@ function timeout(ms: number): Promise<null> {
 
 /**
  * 将 V2 校验错误字段映射到考试要求的标准错误码 E001~E008。
- * 考试错误码约定：
- *  E001 必填字段缺失    E002 电话格式错误    E003 SKU不存在
- *  E004 数量非正数      E005 外部编码重复     E006 收货信息不完整
- *  E007 地址格式异常    E008 其他/系统错误
+ * 考试错误码约定（以 exam-v4-v2-async-event-driven-observability.md 为准）：
+ *  E001 SKU不存在        E002 必填字段缺失      E003 电话格式错误
+ *  E004 数量非正数        E005 外部编码重复      E006 规则映射失败
+ *  E007 数据库写入失败    E008 文件格式/其他
  */
 function mapValidationErrorToCode(field?: string): string {
   switch (field) {
     case "receiver_info":
-      return "E006";
-    case "receiver_phone":
-      return "E002";
+      return "E002"; // 必填字段缺失
     case "external_code":
-      return "E005";
+      return "E002"; // 必填字段缺失（重复场景在切片/落库阶段判定为 E005）
+    case "receiver_phone":
+      return "E003"; // 电话格式错误
     case "sku_code":
-      return "E001";
+      return "E001"; // SKU 不存在
     case "sku_name":
-      return "E001";
-    case "quantity":
-      return "E004";
+      return "E001"; // SKU 缺失
     case "items":
-      return "E001";
+      return "E001"; // SKU 缺失
+    case "quantity":
+      return "E004"; // 数量非正数
     default:
-      return "E008";
+      return "E008"; // 其他/文件格式
   }
 }

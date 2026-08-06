@@ -9,51 +9,74 @@ import { getDb } from "@/lib/db";
 export async function GET(req: NextRequest) {
   const dbc = getDb();
   const taskId = req.nextUrl.searchParams.get("taskId");
-  const where = taskId ? `WHERE task_id = $1` : "";
-  const params = taskId ? [taskId] : [];
 
   try {
     // 1. 分阶段耗时统计：P50/P95/P99/min/max + 样本数（含 parse/sku_validate/db_upsert）
     const phaseStats = await dbc.unsafe(
-      `SELECT phase,
-              COUNT(*)::int AS samples,
-              SUM(rows_processed)::int AS total_rows,
-              MIN(duration_ms)::int AS min_ms,
-              MAX(duration_ms)::int AS max_ms,
-              AVG(duration_ms)::int AS avg_ms,
-              PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY duration_ms)::int AS p50_ms,
-              PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms)::int AS p95_ms,
-              PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY duration_ms)::int AS p99_ms
-       FROM batch_performance_log
-       ${where}
-       GROUP BY phase
-       ORDER BY phase`,
-      params
+      taskId
+        ? `SELECT phase,
+                COUNT(*)::int AS samples,
+                COALESCE(SUM(rows_processed),0)::int AS total_rows,
+                MIN(duration_ms)::int AS min_ms,
+                MAX(duration_ms)::int AS max_ms,
+                AVG(duration_ms)::int AS avg_ms,
+                PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY duration_ms)::int AS p50_ms,
+                PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms)::int AS p95_ms,
+                PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY duration_ms)::int AS p99_ms
+         FROM batch_performance_log
+         WHERE task_id = $1
+         GROUP BY phase
+         ORDER BY phase`
+        : `SELECT phase,
+                COUNT(*)::int AS samples,
+                COALESCE(SUM(rows_processed),0)::int AS total_rows,
+                MIN(duration_ms)::int AS min_ms,
+                MAX(duration_ms)::int AS max_ms,
+                AVG(duration_ms)::int AS avg_ms,
+                PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY duration_ms)::int AS p50_ms,
+                PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms)::int AS p95_ms,
+                PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY duration_ms)::int AS p99_ms
+         FROM batch_performance_log
+         GROUP BY phase
+         ORDER BY phase`,
+      taskId ? [taskId] : []
     );
 
     // 2. TOP10 慢批次（单单元整体耗时，来自 import_task_batches.duration_ms）
     const slowBatches = await dbc.unsafe(
-      `SELECT id AS unit_id, task_id, unit_index, rows_processed_total, duration_ms, status
-       FROM (
-         SELECT b.id, b.task_id, b.unit_index, b.duration_ms, b.status,
-                (b.row_end - b.row_start) AS rows_processed_total
+      taskId
+        ? `SELECT b.id AS unit_id, b.task_id, b.unit_index,
+                (b.row_end - b.row_start) AS rows_processed_total,
+                b.duration_ms, b.status
          FROM import_task_batches b
-         ${taskId ? "WHERE b.task_id = $1" : ""}
-         AND b.duration_ms IS NOT NULL AND b.duration_ms > 0
+         WHERE b.task_id = $1
+           AND b.duration_ms IS NOT NULL AND b.duration_ms > 0
          ORDER BY b.duration_ms DESC
-         LIMIT 10
-       ) t`,
-      params
+         LIMIT 10`
+        : `SELECT b.id AS unit_id, b.task_id, b.unit_index,
+                (b.row_end - b.row_start) AS rows_processed_total,
+                b.duration_ms, b.status
+         FROM import_task_batches b
+         WHERE b.duration_ms IS NOT NULL AND b.duration_ms > 0
+         ORDER BY b.duration_ms DESC
+         LIMIT 10`,
+      taskId ? [taskId] : []
     );
 
-    // 3. 错误码分布 E001~E008（近 24h / 全部）
+    // 3. 错误码分布 E001~E008（指定任务看全部；否则看近 24h）
     const errorCodes = await dbc.unsafe(
-      `SELECT error_code, COUNT(*)::int AS cnt
-       FROM import_task_errors
-       ${taskId ? "WHERE task_id = $1" : "WHERE created_at >= NOW() - INTERVAL '24 hours'"}
-       GROUP BY error_code
-       ORDER BY cnt DESC`,
-      params
+      taskId
+        ? `SELECT error_code, COUNT(*)::int AS cnt
+         FROM import_task_errors
+         WHERE task_id = $1
+         GROUP BY error_code
+         ORDER BY cnt DESC`
+        : `SELECT error_code, COUNT(*)::int AS cnt
+         FROM import_task_errors
+         WHERE created_at >= NOW() - INTERVAL '24 hours'
+         GROUP BY error_code
+         ORDER BY cnt DESC`,
+      taskId ? [taskId] : []
     );
 
     // 4. 队列积压分箱（待投/处理中/待重试/死信）
@@ -95,7 +118,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       generated_at: new Date().toISOString(),
       task_id: taskId,
-      phase_stats: phaseStats,
+      phases: phaseStats.map((p: any) => ({
+        phase: p.phase,
+        samples: p.samples,
+        totalRows: p.total_rows,
+        min: p.min_ms,
+        avg: p.avg_ms,
+        max: p.max_ms,
+        p50: p.p50_ms,
+        p95: p.p95_ms,
+        p99: p.p99_ms,
+      })),
       slow_batches: slowBatches,
       error_codes: errorCodes,
       backlog: backlog[0] || {},

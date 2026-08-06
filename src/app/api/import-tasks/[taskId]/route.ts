@@ -56,16 +56,24 @@ export async function GET(
     }
 
     return NextResponse.json({
-      task,
-      summary: {
-        total_rows: total,
-        success_rows: success,
-        error_rows: failed,
-        processed_rows: processed,
-        error_records: errCount[0]?.cnt || 0,
-        by_status: byStatus,
-        perf: perfAgg[0] || null,
-      },
+      task_id: task.id,
+      filename: task.file_name,
+      status: task.status,
+      total_rows: total,
+      success_rows: success,
+      error_rows: failed,
+      processed_rows: processed,
+      error_records: errCount[0]?.cnt || 0,
+      total_units: Object.values(byStatus).reduce((s: number, b: any) => s + (b.count || 0), 0),
+      processed_units: byStatus.done?.count || 0,
+      degraded: task.degraded || false,
+      started_at: task.created_at,
+      finished_at: task.finished_at,
+      trace_id: task.trace_id,
+      error_summary: task.error_summary,
+      by_status: byStatus,
+      perf: perfAgg[0] || null,
+      created_at: task.created_at,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

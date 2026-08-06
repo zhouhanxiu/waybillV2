@@ -1,203 +1,280 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Loader2, AlertCircle, CheckCircle2, Layers, GitBranch, RefreshCw } from "lucide-react";
+import { Activity, CheckCircle2, XCircle, Loader2, Clock, Database, AlertTriangle, ExternalLink, RefreshCw } from "lucide-react";
 
-type Summary = {
-  total_rows: number;
-  success_rows: number;
-  error_rows: number;
-  processed_rows: number;
-  error_records: number;
-  by_status: Record<string, any>;
-  perf: any;
+type TaskStatus = "pending" | "running" | "completed" | "failed" | "processing" | "degraded";
+
+type TaskInfo = {
+  id: string;
+  task_id: string;
+  filename?: string;
+  status: TaskStatus | string;
+  total_units?: number;
+  processed_units?: number;
+  total_rows?: number;
+  processed_rows?: number;
+  error_rows?: number;
+  units?: number;
+  started_at?: string;
+  finished_at?: string;
+  trace_id?: string;
+  degraded?: boolean;
+  error_summary?: string;
+};
+
+type PhaseStats = {
+  phase: string;
+  samples: number;
+  p50: number;
+  p95: number;
+  p99: number;
+  avg: number;
+  min: number;
+  max: number;
+  totalRows: number;
+};
+
+const PHASE_LABEL: Record<string, string> = {
+  parse: "解析",
+  validate_sku: "SKU校验",
+  upsert: "入库",
+  total: "总耗时",
+  dispatch: "派发",
+  process: "处理",
 };
 
 export default function TaskDetailPage() {
-  const params = useParams();
-  const taskId = params.taskId as string;
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<any>(null);
-  const [tab, setTab] = useState<"batches" | "errors">("batches");
-  const [batches, setBatches] = useState<any[]>([]);
+  const params = useParams<{ taskId: string }>();
+  const taskId = params?.taskId;
+  const [task, setTask] = useState<TaskInfo | null>(null);
   const [errors, setErrors] = useState<any[]>([]);
-  const [errTotal, setErrTotal] = useState(0);
+  const [phase, setPhase] = useState<PhaseStats[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const fetchAll = useCallback(async () => {
+    if (!taskId) return;
     try {
-      const res = await fetch(`/api/import-tasks/${taskId}`);
-      if (res.ok) setData(await res.json());
+      const [taskRes, errRes, phaseRes] = await Promise.all([
+        fetch(`/api/import-tasks/${taskId}`, { cache: "no-store" }),
+        fetch(`/api/import-tasks/${taskId}/errors`, { cache: "no-store" }),
+        fetch(`/api/import-monitor/phase?taskId=${encodeURIComponent(taskId)}`, { cache: "no-store" }),
+      ]);
+      const taskData = await taskRes.json();
+      if (!taskRes.ok) throw new Error(taskData.error || `HTTP ${taskRes.status}`);
+      setTask(taskData);
+      if (errRes.ok) {
+        const errData = await errRes.json();
+        setErrors(errData.errors || errData.items || []);
+      }
+      if (phaseRes.ok) {
+        const phaseData = await phaseRes.json();
+        setPhase(phaseData.phases || []);
+      }
+      setErr(null);
+    } catch (e: any) {
+      setErr(e.message || "查询失败");
     } finally {
       setLoading(false);
     }
   }, [taskId]);
 
-  const loadBatches = useCallback(async () => {
-    const res = await fetch(`/api/import-tasks/${taskId}/batches?pageSize=50`);
-    if (res.ok) { const d = await res.json(); setBatches(d.batches); }
-  }, [taskId]);
-
-  const loadErrors = useCallback(async () => {
-    const res = await fetch(`/api/import-tasks/${taskId}/errors?pageSize=50`);
-    if (res.ok) { const d = await res.json(); setErrors(d.errors); setErrTotal(d.total); }
-  }, [taskId]);
-
-  useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    if (tab === "batches") loadBatches();
-    else loadErrors();
-  }, [tab, loadBatches, loadErrors]);
+    fetchAll();
+  }, [fetchAll]);
+
+  // 1.5s 自动轮询（任务未完成时）
+  useEffect(() => {
+    if (!task) return;
+    const s = task.status;
+    if (s === "completed" || s === "failed") return;
+    const t = setInterval(() => setTick((x) => x + 1), 1500);
+    return () => clearInterval(t);
+  }, [task?.status]);
+
+  useEffect(() => {
+    if (tick > 0) fetchAll();
+  }, [tick, fetchAll]);
 
   if (loading) {
-    return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-jingtian" /></div>;
+    return (
+      <div className="max-w-4xl mx-auto p-6 flex items-center gap-3 text-ink-soft">
+        <Loader2 className="w-5 h-5 animate-spin" /> 加载任务详情…
+      </div>
+    );
   }
-  if (!data) return <div className="text-center py-20 text-ink-soft">任务不存在</div>;
 
-  const s: Summary = data.summary;
-  const task = data.task;
-  const pct = s.total_rows ? Math.round((s.processed_rows / s.total_rows) * 100) : 0;
-  const okPct = s.total_rows ? Math.round((s.success_rows / s.total_rows) * 100) : 0;
+  if (err || !task) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+          <AlertTriangle className="w-4 h-4" /> 加载失败：{err || "任务不存在"}
+        </div>
+        <Link href="/" className="mt-4 inline-block text-sm text-jingtian hover:underline">← 回到上传</Link>
+      </div>
+    );
+  }
+
+  const status = task.status;
+  const total = task.total_units ?? task.units ?? 0;
+  const processed = task.processed_units ?? 0;
+  const totalRows = task.total_rows ?? 0;
+  const procRows = task.processed_rows ?? 0;
+  const errRows = task.error_rows ?? 0;
+  const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
+  const isDone = status === "completed" || status === "failed";
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="max-w-5xl mx-auto p-6">
+      {/* 顶部：任务ID + 状态 + 操作 */}
+      <div className="flex items-start justify-between mb-6">
         <div>
-          <Link href="/tasks" className="text-sm text-jingtian hover:underline">← 返回任务列表</Link>
-          <h1 className="text-xl font-bold text-ink mt-1 truncate">{task.file_name}</h1>
-          <p className="text-xs text-ink-soft font-mono mt-1">{taskId}</p>
+          <div className="flex items-center gap-2 mb-1">
+            {statusBadge(status)}
+            {task.degraded && (
+              <span className="px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-700 text-xs">降级模式</span>
+            )}
+          </div>
+          <h1 className="text-xl font-bold text-ink">{task.filename || task.task_id || taskId}</h1>
+          <div className="text-xs text-ink-soft mt-1 font-mono">
+            {taskId}{task.trace_id && <span className="ml-3">trace: {task.trace_id.slice(0, 16)}…</span>}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href={`/traces?taskId=${taskId}`} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-white border border-line text-sm text-ink-soft hover:bg-bg">
-            <GitBranch className="w-4 h-4" /> Trace
-          </Link>
-          <button onClick={load} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-white border border-line text-sm text-ink-soft hover:bg-bg">
-            <RefreshCw className="w-4 h-4" /> 刷新
+        <div className="flex gap-2">
+          <button onClick={fetchAll} className="px-3 py-1.5 rounded-lg border border-line text-sm text-ink-soft hover:bg-bg flex items-center gap-1">
+            <RefreshCw className="w-3.5 h-3.5" /> 刷新
           </button>
+          <Link href="/traces" className="px-3 py-1.5 rounded-lg border border-line text-sm text-ink-soft hover:bg-bg flex items-center gap-1">
+            <ExternalLink className="w-3.5 h-3.5" /> Trace 检索
+          </Link>
         </div>
       </div>
 
-      {/* 降级模式标注（考试模块十：明确告知用户已进入降级模式） */}
-      {task.degraded && (
-        <div className="flex items-start gap-3 mb-6 px-4 py-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-800">
-          <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
-          <div className="text-sm leading-relaxed">
-            <div className="font-semibold">⚠️ 本任务已进入降级模式（Degraded Mode）</div>
-            <div className="mt-1 text-amber-700">
-              由于 SKU 主数据校验服务超时（&gt;3s）或不可用，系统已自动降级：跳过逐行 SKU 强校验、放行写入运单主表，
-              以保证导入吞吐与可用性。降级期间写入的运单未做 SKU 主数据一致性校验，请在恢复后复核。
-            </div>
-          </div>
+      {/* 进度 */}
+      <div className="bg-white rounded-2xl border border-line p-6 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm text-ink-soft">
+            {isDone ? "已完成" : "处理中…"}
+          </span>
+          <span className="text-sm font-medium text-ink">{processed} / {total} 单元</span>
         </div>
-      )}
-
-      {/* 进度卡 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <Stat label="总进度" value={`${pct}%`} icon={<Layers className="w-4 h-4" />} />
-        <Stat label="成功行" value={`${s.success_rows}`} sub={`${okPct}%`} color="text-green-600" icon={<CheckCircle2 className="w-4 h-4" />} />
-        <Stat label="失败行" value={`${s.error_rows}`} color="text-red-600" icon={<AlertCircle className="w-4 h-4" />} />
-        <Stat label="错误明细" value={`${s.error_records}`} color="text-amber-600" icon={<AlertCircle className="w-4 h-4" />} />
+        <div className="w-full h-3 bg-bg rounded-full overflow-hidden">
+          <div className={`h-full transition-all duration-500 ${isDone ? "bg-jingtian" : "bg-jingtian animate-pulse"}`} style={{ width: `${pct}%` }}></div>
+        </div>
+        <div className="grid grid-cols-4 gap-4 mt-4 text-center">
+          <Stat icon={<Database className="w-4 h-4" />} label="总行数" value={totalRows} />
+          <Stat icon={<CheckCircle2 className="w-4 h-4" />} label="已处理" value={procRows} />
+          <Stat icon={<AlertTriangle className="w-4 h-4" />} label="错误行" value={errRows} highlight={errRows > 0} />
+          <Stat icon={<Clock className="w-4 h-4" />} label="耗时" value={fmtDuration(task.started_at, task.finished_at)} />
+        </div>
       </div>
 
-      {/* 进度条 */}
-      <div className="bg-white rounded-xl border border-line p-4 mb-6">
-        <div className="flex justify-between text-sm mb-2">
-          <span className="text-ink-soft">处理进度（{s.processed_rows}/{s.total_rows}）</span>
-          <span className="font-medium text-ink">{pct}%</span>
-        </div>
-        <div className="w-full h-2.5 bg-bg rounded-full overflow-hidden">
-          <div className="h-full bg-jingtian transition-all" style={{ width: `${pct}%` }}></div>
-        </div>
-        {s.perf && (
-          <div className="mt-3 text-xs text-ink-soft grid grid-cols-2 md:grid-cols-4 gap-2">
-            <span>单元数：{s.perf.units}</span>
-            <span>平均耗时：{s.perf.avg_ms}ms</span>
-            <span>P95：{s.perf.p95_ms ?? s.perf.max_ms}ms</span>
-            <span>最大：{s.perf.max_ms}ms</span>
+      {/* 阶段耗时 */}
+      <div className="bg-white rounded-2xl border border-line p-6 mb-4">
+        <h2 className="text-sm font-semibold text-ink mb-3 flex items-center gap-1"><Activity className="w-4 h-4" /> 阶段耗时</h2>
+        {phase.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs text-ink-soft">
+                <tr>
+                  <th className="text-left py-2">阶段</th>
+                  <th className="text-right py-2">样本</th>
+                  <th className="text-right py-2">P50</th>
+                  <th className="text-right py-2">P95</th>
+                  <th className="text-right py-2">P99</th>
+                  <th className="text-right py-2">最大</th>
+                </tr>
+              </thead>
+              <tbody>
+                {phase.map((p) => (
+                  <tr key={p.phase} className="border-t border-line">
+                    <td className="py-2 font-medium">{PHASE_LABEL[p.phase] || p.phase}</td>
+                    <td className="text-right py-2 text-ink-soft">{p.samples}</td>
+                    <td className="text-right py-2">{p.p50}ms</td>
+                    <td className="text-right py-2">{p.p95}ms</td>
+                    <td className="text-right py-2">{p.p99}ms</td>
+                    <td className="text-right py-2 text-ink-soft">{p.max}ms</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+        ) : (
+          <p className="text-sm text-ink-soft">暂无阶段耗时数据（任务还在跑或单元尚未完成）</p>
         )}
       </div>
 
-      {/* Tab */}
-      <div className="flex gap-1 mb-4 border-b border-line">
-        <button
-          onClick={() => setTab("batches")}
-          className={`px-4 py-2 text-sm font-medium ${tab === "batches" ? "text-jingtian border-b-2 border-jingtian" : "text-ink-soft"}`}
-        >单元列表</button>
-        <button
-          onClick={() => setTab("errors")}
-          className={`px-4 py-2 text-sm font-medium ${tab === "errors" ? "text-jingtian border-b-2 border-jingtian" : "text-ink-soft"}`}
-        >错误明细 ({errTotal})</button>
-      </div>
-
-      {tab === "batches" ? (
-        <div className="bg-white rounded-xl border border-line overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-bg text-ink-soft"><tr>
-              <th className="text-left px-4 py-2">#</th>
-              <th className="text-left px-4 py-2">状态</th>
-              <th className="text-right px-4 py-2">行数</th>
-              <th className="text-right px-4 py-2">成功</th>
-              <th className="text-right px-4 py-2">失败</th>
-              <th className="text-right px-4 py-2">重试</th>
-            </tr></thead>
-            <tbody>
-              {batches.map((b) => (
-                <tr key={b.id} className="border-t border-line">
-                  <td className="px-4 py-2">{b.unit_index}</td>
-                  <td className="px-4 py-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${b.status === 'completed' ? 'bg-green-100 text-green-700' : b.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{b.status}</span>
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums">{b.total_rows}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-green-600">{b.success_rows}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-red-600">{b.error_rows}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{b.attempt}</td>
+      {/* 错误明细 */}
+      {errors.length > 0 && (
+        <div className="bg-white rounded-2xl border border-line p-6">
+          <h2 className="text-sm font-semibold text-ink mb-3 flex items-center gap-1">
+            <AlertTriangle className="w-4 h-4 text-amber-500" /> 错误明细（{errors.length} 行）
+          </h2>
+          <div className="overflow-x-auto max-h-96 overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs text-ink-soft sticky top-0 bg-white">
+                <tr>
+                  <th className="text-left py-2">行号</th>
+                  <th className="text-left py-2">错误码</th>
+                  <th className="text-left py-2">字段</th>
+                  <th className="text-left py-2">说明</th>
                 </tr>
-              ))}
-              {batches.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-ink-soft">暂无单元</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl border border-line overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-bg text-ink-soft"><tr>
-              <th className="text-left px-4 py-2">行</th>
-              <th className="text-left px-4 py-2">级别</th>
-              <th className="text-left px-4 py-2">错误码</th>
-              <th className="text-left px-4 py-2">消息</th>
-              <th className="text-left px-4 py-2">收件人</th>
-              <th className="text-left px-4 py-2">电话</th>
-            </tr></thead>
-            <tbody>
-              {errors.map((e) => (
-                <tr key={e.id} className="border-t border-line">
-                  <td className="px-4 py-2 tabular-nums">{e.row_number}</td>
-                  <td className="px-4 py-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${e.level === 'ERROR' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{e.level}</span>
-                  </td>
-                  <td className="px-4 py-2 font-mono text-xs">{e.error_code}</td>
-                  <td className="px-4 py-2 max-w-[280px] truncate" title={e.error_message}>{e.error_message}</td>
-                  <td className="px-4 py-2">{e.receiver_name || '-'}</td>
-                  <td className="px-4 py-2 font-mono text-xs">{e.receiver_phone_masked || '-'}</td>
-                </tr>
-              ))}
-              {errors.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-ink-soft">无错误记录</td></tr>}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {errors.map((e, i) => (
+                  <tr key={i} className="border-t border-line">
+                    <td className="py-2 font-mono">{e.row_index ?? e.rowIndex ?? "—"}</td>
+                    <td className="py-2"><code className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 text-xs">{e.error_code || e.code || "—"}</code></td>
+                    <td className="py-2 text-ink-soft">{e.field || "—"}</td>
+                    <td className="py-2">{e.message || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
+
+      {/* 提示 */}
+      <div className="mt-4 text-xs text-ink-soft text-center">
+        {isDone ? "✓ 任务已结束" : "每 1.5 秒自动刷新 · 您可关闭页面，在 <Link href=\"/tasks\" className=\"text-jingtian\">导入任务</Link> 中查看历史"}
+      </div>
     </div>
   );
 }
 
-function Stat({ label, value, sub, color, icon }: { label: string; value: string; sub?: string; color?: string; icon: React.ReactNode }) {
+function statusBadge(s: string) {
+  const map: Record<string, { color: string; icon: React.ReactNode; text: string }> = {
+    pending: { color: "bg-bg text-ink-soft", icon: <Clock className="w-3.5 h-3.5" />, text: "等待中" },
+    running: { color: "bg-blue-50 text-blue-700", icon: <Loader2 className="w-3.5 h-3.5 animate-spin" />, text: "处理中" },
+    processing: { color: "bg-blue-50 text-blue-700", icon: <Loader2 className="w-3.5 h-3.5 animate-spin" />, text: "处理中" },
+    completed: { color: "bg-green-50 text-green-700", icon: <CheckCircle2 className="w-3.5 h-3.5" />, text: "已完成" },
+    failed: { color: "bg-red-50 text-red-700", icon: <XCircle className="w-3.5 h-3.5" />, text: "失败" },
+    degraded: { color: "bg-amber-50 text-amber-700", icon: <AlertTriangle className="w-3.5 h-3.5" />, text: "降级" },
+  };
+  const cfg = map[s] || map.pending;
+  return <span className={`px-2 py-0.5 rounded-md ${cfg.color} text-xs flex items-center gap-1 inline-flex`}>{cfg.icon}{cfg.text}</span>;
+}
+
+function Stat({ icon, label, value, highlight }: { icon: React.ReactNode; label: string; value: any; highlight?: boolean }) {
   return (
-    <div className="bg-white rounded-xl border border-line p-4">
-      <div className="flex items-center gap-2 text-ink-soft text-sm mb-1">{icon}{label}</div>
-      <div className={`text-2xl font-bold ${color || "text-ink"}`}>{value}{sub && <span className="text-sm font-normal ml-1 text-ink-soft">{sub}</span>}</div>
+    <div className="bg-bg rounded-xl p-3">
+      <div className="flex items-center justify-center gap-1 text-xs text-ink-soft mb-1">{icon}{label}</div>
+      <div className={`text-lg font-semibold ${highlight ? "text-red-600" : "text-ink"}`}>{value}</div>
     </div>
   );
+}
+
+function fmtDuration(start?: string, end?: string) {
+  if (!start) return "—";
+  const s = new Date(start).getTime();
+  const e = end ? new Date(end).getTime() : Date.now();
+  const ms = Math.max(0, e - s);
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(2)}s`;
+  return `${Math.floor(ms / 60000)}m${Math.floor((ms % 60000) / 1000)}s`;
 }

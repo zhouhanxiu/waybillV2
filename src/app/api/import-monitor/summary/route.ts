@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
 
   const db = getDb();
   try {
+    // 强制 schema 限定 public（绕开 search_path / $user 解析的同名表劫持问题）
     const taskAgg = await db.unsafe(`
       SELECT
         COUNT(*)::int AS total_tasks,
@@ -28,23 +29,23 @@ export async function GET(req: NextRequest) {
         SUM(total_rows)::int AS total_rows,
         SUM(success_rows)::int AS success_rows,
         SUM(error_rows)::int AS error_rows
-      FROM import_tasks
+      FROM public.import_tasks
     `);
 
     const perf = await db.unsafe(`
       SELECT
         COUNT(*)::int AS units,
-        SUM(total_rows)::int AS rows_processed,
+        SUM(rows_processed)::int AS rows_processed,
         AVG(duration_ms)::int AS avg_ms,
         MAX(duration_ms)::int AS max_ms,
         PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms)::int AS p95_ms
-      FROM batch_performance_log
+      FROM public.batch_performance_log
     `);
 
     const recent = await db.unsafe(`
       SELECT id, file_name, status, total_rows, success_rows, error_rows,
              created_at, finished_at
-      FROM import_tasks
+      FROM public.import_tasks
       ORDER BY created_at DESC
       LIMIT 10
     `);
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
       SELECT to_char(created_at, 'HH24') AS hour,
              COUNT(*)::int AS tasks,
              SUM(total_rows)::int AS rows
-      FROM import_tasks
+      FROM public.import_tasks
       WHERE created_at >= NOW() - INTERVAL '24 hours'
       GROUP BY hour
       ORDER BY hour
@@ -69,6 +70,10 @@ export async function GET(req: NextRequest) {
     await setCached(cacheKey, payload);
     return NextResponse.json(payload);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("[import-monitor/summary] ERROR:", err?.message);
+    return NextResponse.json(
+      { error: err?.message || String(err), code: err?.code, hint: "查看 Vercel 函数日志: [import-monitor/summary] ERROR" },
+      { status: 500 }
+    );
   }
 }

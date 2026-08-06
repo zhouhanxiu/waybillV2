@@ -38,24 +38,6 @@ export async function POST(req: NextRequest) {
  * 原子抢占（processUnit 内部 WHERE status IN ('pending','failed')）保证并发安全：
  * fire-and-forget 与 Cron 路由同时跑也不会双跑同一单元。
  */
-async function consumeAllUnits(taskId: string) {
-  // 每轮最多取 8 个单元并发处理（受 maxDuration=60s 约束），
-  // 1 万行单单元场景 1 轮即可完成；多单元场景也保证高吞吐。
-  for (;;) {
-    const due = await query<{ id: string }>(
-      `SELECT id FROM import_task_batches
-       WHERE task_id=$1 AND status IN ('pending','failed')
-         AND attempt < 5
-         AND (next_retry_at IS NULL OR next_retry_at <= NOW())
-       ORDER BY attempt ASC, unit_index ASC
-       LIMIT 8`,
-      [taskId]
-    );
-    if (due.length === 0) break;
-    await Promise.all(due.map((b) => processUnit(taskId, b.id).catch((e) => console.error("unit failed", b.id, e?.message))));
-  }
-}
-
 /**
  * 默认规则（与 scripts/seed-data.ts 生成的压测文件列序严格对齐）
  * 压测文件实际列序（7列）：
@@ -187,27 +169,23 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
     [traceId, taskId, `接收导入：file=${fileName} rows=${totalRows} units=${units.length}`, readMs + parseMs]
   );
 
-  // QStash 模式：事件已写入 event_outbox，触发一次 dispatcher 把事件投递到 QStash，
-  // 由 /api/worker/qstash 回调异步消费（Serverless 原生、带平台重试）。
-  // 非 QStash 模式（memory/cron）：同步消费全部单元（1万行单单元场景整体 <60s）。
-  const useQstash = (process.env.QUEUE_BACKEND || "memory") === "qstash";
-  if (useQstash) {
-    // 返回前同步等待至少一次投递完成（确保 outbox 事件真正发到 QStash，
-    // 避免 Serverless 进程冻结导致投递丢失）；region 已修正，publish 通常 <1s
-    try {
-      const { dispatchOnce } = await import("@/lib/queue/outbox");
-      const dT0 = Date.now();
-      await dispatchOnce();
-      console.log(JSON.stringify({ stage: "import.dispatch", taskId, dispatchMs: Date.now() - dT0, backend: "qstash" }));
-    } catch (err: any) {
-      console.error("[import-tasks] qstash dispatch error", taskId, err?.message);
-    }
-  } else {
-    // 纯 Vercel 方案：HTTP 返回后 Vercel Function 进程立即冻结，fire-and-forget 无法继续。
-    // 因此同步消费全部单元——1万行 / 10 单元，每单元 <1s，整体远小于 60s 函数上限。
-    await consumeAllUnits(taskId).catch((err) =>
-      console.error("[import-tasks] background consume error", taskId, err?.message)
-    );
+  // 异步事件驱动：上传接口只负责"接收+落库+投递 Outbox"，绝不在此同步消费。
+  // 无论是否配置 QStash，HTTP 都会在 dispatchOnce() 触发后立即返回（≤1s），
+  // 真正的单元处理由 QStash 回调 / Vercel Cron 兜底 / 内存泵 三选一异步完成。
+  // 由 src/lib/queue/outbox.ts 的 enqueueUnit 决定实际后端：
+  //   - 配了 QSTASH_TOKEN → 投递到 QStash（Serverless 原生、带平台重试）
+  //   - 否则 → 内存队列（本地/常驻进程常活），Serverless 下由 vercel.json 的
+  //     cron 每 1 分钟触发 /api/worker/cron 兜底消费，保证不卡死。
+  // 关键：不在此处同步 consumeAllUnits，彻底避免"上传同步等待批量导入"。
+  const useQstash = !!process.env.QSTASH_TOKEN;
+  try {
+    const { dispatchOnce } = await import("@/lib/queue/outbox");
+    const dT0 = Date.now();
+    await dispatchOnce();
+    console.log(JSON.stringify({ stage: "import.dispatch", taskId, dispatchMs: Date.now() - dT0, backend: useQstash ? "qstash" : "memory" }));
+  } catch (err: any) {
+    // 投递失败也不阻塞上传：cron 兜底会重新拉取 pending 单元消费
+    console.error("[import-tasks] dispatch error (will be retried by cron)", taskId, err?.message);
   }
 
   const elapsed = Date.now() - t0;

@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     if (errorCode) {
       const rows = await db.unsafe(
         `SELECT e.id, e.task_id, e.unit_id, e.row_index, e.error_code, e.error_message,
-                e.s raw_row, e.created_at, t.trace_id
+                e.raw_data AS raw_row, e.masked_data, e.created_at, t.trace_id
          FROM import_task_errors e
          LEFT JOIN import_tasks t ON t.id = e.task_id
          WHERE e.error_code = $1

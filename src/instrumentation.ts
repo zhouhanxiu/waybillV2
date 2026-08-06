@@ -23,7 +23,11 @@ export async function register() {
     // WORKER_MODE=cron：纯 Vercel 生产，不启动内存 pump，消费交给 /api/worker/cron（Vercel Cron 触发）
     // WORKER_MODE=qstash：消费由 /api/worker/qstash 回调完成，startWorker 仅登记 worker 函数
     // 其他（默认/auto）：启动内存 pump 即时消费（本地开发、Railway 常驻）
-    const workerMode = process.env.WORKER_MODE || "auto";
+    // 清理可能携带的 BOM/不可见字符（Vercel 配置偶发 \uFEFF 前缀）
+    const workerMode = (process.env.WORKER_MODE || "auto").replace(
+      /^[\uFEFF\u200B\u200C\u200D\s\u00A0]+|[\uFEFF\u200B\u200C\u200D\s\u00A0]+$/g,
+      ""
+    );
     const { startWorker } = await import("@/lib/queue");
     const { processUnit } = await import("@/lib/worker/processUnit");
     const workerFn = async (job: { taskId: string; unitId: string }) => {

@@ -28,7 +28,7 @@ export async function GET(
     );
 
     const masked = await db.unsafe(
-      `SELECT id, task_id, batch_id, row_number, level, error_code, error_message,
+      `SELECT id, task_id, batch_id, line_no, row_index, level, error_code, error_message,
               receiver_name,
               CASE WHEN receiver_phone IS NOT NULL AND receiver_phone <> ''
                    THEN substring(receiver_phone, 1, 3) || '****' || substring(receiver_phone, length(receiver_phone)-3, 4)
@@ -36,7 +36,7 @@ export async function GET(
               receiver_address, sku_code, created_at
        FROM import_task_errors
        WHERE ${whereSql}
-       ORDER BY row_number ASC
+       ORDER BY line_no ASC
        LIMIT $${args.length + 1} OFFSET $${args.length + 2}`,
       [...args, pageSize, offset]
     );

@@ -1,3 +1,11 @@
 {
-  "installCommand": "echo 'node-linker=hoisted' > .npmrc && pnpm install --no-frozen-lockfile"
+  "installCommand": "echo 'node-linker=hoisted' > .npmrc && pnpm install --no-frozen-lockfile",
+  "framework": "nextjs",
+  "regions": ["sin1"],
+  "crons": [
+    {
+      "path": "/api/worker/cron",
+      "schedule": "0 0 * * *"
+    }
+  ]
 }

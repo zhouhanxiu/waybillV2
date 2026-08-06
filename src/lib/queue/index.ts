@@ -29,8 +29,14 @@ export function getRegisteredWorker(): WorkerFn | null {
   return registeredWorker;
 }
 
+// 清理环境变量可能携带的 BOM/不可见字符（Vercel 配置偶发 \uFEFF 前缀，
+// 会导致 "qstash" 判定失败、异步投递降级失效）
+function sanitizeEnv(v: string | undefined): string {
+  return (v ?? "").replace(/^[\uFEFF\u200B\u200C\u200D\s\u00A0]+|[\uFEFF\u200B\u200C\u200D\s\u00A0]+$/g, "");
+}
+
 const backend: QueueBackend =
-  (process.env.QUEUE_BACKEND as QueueBackend) || "memory";
+  (sanitizeEnv(process.env.QUEUE_BACKEND) as QueueBackend) || "memory";
 
 // ── memory 后端实现 ──────────────────────────────────────────────
 const memoryQueue: UnitJob[] = [];
@@ -92,17 +98,22 @@ import { Client } from "@upstash/qstash";
 let qstashClient: Client | null = null;
 function ensureQstash(): Client {
   if (!qstashClient) {
-    const token = process.env.QSTASH_TOKEN;
+    // 清理 BOM/不可见字符：Vercel 环境变量偶发 \uFEFF 前缀，
+    // 带 BOM 的 token 在 undici 设置 Header 时会抛
+    // "Cannot convert argument to a ByteString ... 65279" 错误
+    const token = sanitizeEnv(process.env.QSTASH_TOKEN);
     if (!token) throw new Error("QSTASH_TOKEN 未配置，无法使用 qstash 后端");
-    // 多区域支持：账号实际在 eu-central-1，必须显式指定 baseUrl 否则命中默认 region 404
-    const baseUrl = process.env.QSTASH_URL || "https://qstash.eu-central-1.upstash.io";
+    // QStash REST 域名固定为 qstash.upstash.io（区域由 token 决定，无需区域前缀）。
+    // 注意：带区域前缀的 qstash.eu-central-1.upstash.io 域名不存在（ENOTFOUND），
+    // 因此忽略 QSTASH_URL 中的区域前缀，统一用标准域名。
+    const baseUrl = "https://qstash.upstash.io";
     qstashClient = new Client({ token, baseUrl });
   }
   return qstashClient;
 }
 
 function qstashWorkerUrl(): string {
-  const raw = (process.env.APP_BASE_URL || process.env.VERCEL_URL || "").replace(/\/$/, "");
+  const raw = sanitizeEnv(process.env.APP_BASE_URL || process.env.VERCEL_URL).replace(/\/$/, "");
   if (!raw) throw new Error("APP_BASE_URL / VERCEL_URL 未配置，无法确定 QStash 回调地址");
   const base = raw.startsWith("http") ? raw : `https://${raw}`;
   return `${base}/api/worker/qstash`;

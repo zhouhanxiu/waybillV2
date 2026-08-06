@@ -29,10 +29,10 @@ for (const f of [".env.local", ".env"]) {
   } catch {}
 }
 
-const SKU_TOTAL = 20000;
+const SKU_TOTAL = parseInt(process.argv.find((a) => a.startsWith("--sku="))?.split("=")[1] || "20000");
 const ROWS = parseInt(process.argv.find((a) => a.startsWith("--rows"))?.split("=")[1] || "10000");
-const skuOnly = process.argv.includes("--sku-only");
-const xlsxOnly = process.argv.includes("--xlsx-only");
+const skuOnly = process.argv.includes("--sku-only") || process.argv.includes("--seed-sku");
+const xlsxOnly = process.argv.includes("--xlsx-only") || process.argv.includes("--gen-test");
 const fresh = process.argv.includes("--fresh");
 const tagArg = process.argv.find((a) => a.startsWith("--tag"))?.split("=")[1];
 // --fresh 自动生成时间戳 tag；--tag xxx 用指定前缀；否则空（覆盖标准压测文件）

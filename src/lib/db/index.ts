@@ -20,18 +20,20 @@ export function getDb() {
   const url = sanitizeUrl(raw);
   if (!sql) {
     // statement_timeout 是 Postgres 运行时参数（非 postgres.js 连接选项）。
-    // 通过连接串 options 注入，使连接池里每个新连接都禁用 statement 超时（0 = 不超时），
-    // 避免 Supabase 对建索引/大批量 UPSERT 取消语句。
-    const opts = "options=-c%20statement_timeout=0";
-    const urlWithOpts = url.includes("?") ? `${url}&${opts}` : `${url}?${opts}`;
+    // 通过 libpq 的 options 参数注入，使连接池里每个新连接都禁用 statement 超时（0 = 不超时），
+    // 并强制 search_path 锁定到 public，避免 "postgres.import_tasks"（无 total_rows）劫持非限定名查询。
+    const urlWithOpts = url; // 不在 URL 里加 options，全部走 connection.options
     sql = postgres(urlWithOpts, {
       prepare: false,
       max: 10,
       idle_timeout: 20,
-      connect_timeout: 10,
-      max_lifetime: 30,
+      connect_timeout: 30,   // 跨太平洋到 Supabase 池，10s 太短
+      max_lifetime: 30 * 60, // 30 分钟，跨网重连成本高
+      // 失败时自动重连：postgres.js 内部会按退避重试
+      onnotice: () => {},
       connection: {
-        application_name: "waybill_v3",
+        application_name: "waybill_v2",
+        options: "-c statement_timeout=0 -c search_path=public,extensions",
       },
     });
   }
@@ -147,6 +149,54 @@ export async function initDb() {
     ALTER TABLE IF EXISTS waybill_item_snapshots ADD COLUMN IF NOT EXISTS snapshot_id TEXT;
     CREATE INDEX IF NOT EXISTS idx_item_snapshots_snap ON waybill_item_snapshots(snapshot_id);
   `);
+
+  // V4 异步导入核心表：统一由 migrate-v4.ts 的 migrateV4() 建表（与 runImport / processUnit / 监控对齐）。
+  // 不在 initDb 内重复建表，避免列定义不一致。migrateV4 幂等（CREATE TABLE IF NOT EXISTS + ADD COLUMN IF NOT EXISTS）。
+  const { migrateV4 } = await import("./migrate-v4");
+  await migrateV4();
+
+  // 兜底：单条 ALTER（如果上面批量 ALTER 因任何原因跳过，强制补齐 summary 必需的列）
+  const alters = [
+    "total_rows", "success_rows", "error_rows", "valid_rows", "warning_rows",
+    "total_units", "processed_units", "status", "duration_ms"
+  ];
+  for (const col of alters) {
+    try {
+      const sqlText =
+        col === "status" ? `ALTER TABLE IF EXISTS import_tasks ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'uploaded'`
+        : col === "duration_ms" ? `ALTER TABLE IF EXISTS import_tasks ADD COLUMN IF NOT EXISTS duration_ms BIGINT DEFAULT 0`
+        : `ALTER TABLE IF EXISTS import_tasks ADD COLUMN IF NOT EXISTS ${col} INTEGER NOT NULL DEFAULT 0`;
+      await query(sqlText);
+      console.log(`[initDb] ALTER import_tasks ${col} ok`);
+    } catch (e: any) {
+      console.error(`[initDb] ALTER import_tasks ${col} FAILED:`, e?.message);
+    }
+  }
+
+  // 清理：drop 同名"幽灵"对象（postgres schema 里若有 import_tasks 视图/旧表，会劫持 search_path 查询）
+  try {
+    await query(`DROP VIEW IF EXISTS postgres.import_tasks CASCADE;`);
+    await query(`DROP TABLE IF EXISTS postgres.import_tasks CASCADE;`);
+    console.log(`[initDb] dropped ghost import_tasks in postgres schema`);
+  } catch (e: any) {
+    console.error(`[initDb] drop ghost failed:`, e?.message);
+  }
+
+  // 强制锁 search_path：每个连接创建后立即跑
+  try {
+    await query(`SET search_path TO public, extensions`);
+    console.log(`[initDb] SET search_path=public,extensions`);
+  } catch (e: any) {
+    console.error(`[initDb] SET search_path failed:`, e?.message);
+  }
+
+  // 数据库/角色级 search_path 永久锁定（防止 postgres.import_tasks 劫持）
+  try {
+    await query(`ALTER DATABASE postgres SET search_path TO public, extensions`);
+    console.log(`[initDb] ALTER DATABASE search_path ok`);
+  } catch (e: any) {
+    console.error(`[initDb] ALTER DATABASE search_path failed:`, e?.message);
+  }
 
   dbInitialized = true;
 }

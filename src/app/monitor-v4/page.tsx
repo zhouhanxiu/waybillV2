@@ -29,7 +29,7 @@ export default function MonitorV4Page() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
   const [phase, setPhase] = useState<any>(null);
-  const [tab, setTab] = useState<"overview" | "phase" | "queue" | "errors" | "slow">("overview");
+  const [tab, setTab] = useState<"overview" | "phase" | "queue" | "errors" | "slow">("phase");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -112,18 +112,24 @@ export default function MonitorV4Page() {
         <>
           {/* 区域1：实时吞吐量（过去5分钟每分钟） */}
           <Section title="实时吞吐量（过去 5 分钟每分钟成功入库行数）" icon={<Activity className="w-4 h-4" />}>
-            <div className="flex items-end gap-2 h-36">
-              {((phase?.throughput_5m || []).length > 0 ? phase.throughput_5m : [{ minute: "—", rows: 0 }]).map((m: any) => {
-                const max = Math.max(...(phase?.throughput_5m || [{ rows: 1 }]).map((x: any) => x.rows || 1), 1);
-                const h2 = Math.max(4, Math.round(((m.rows || 0) / max) * 130));
-                return (
-                  <div key={m.minute} className="flex-1 flex flex-col items-center justify-end">
-                    <div className="w-full bg-jingtian rounded-t" style={{ height: `${h2}px` }} title={`${m.minute}: ${m.rows}行`}></div>
-                    <span className="text-[10px] text-ink-soft mt-1">{m.minute}</span>
-                  </div>
-                );
-              })}
-            </div>
+            {((phase?.throughput_5m || []) as any[]).length > 0 ? (
+              <div className="flex items-end gap-2 h-36">
+                {(phase.throughput_5m as any[]).map((m: any) => {
+                  const max = Math.max(...(phase.throughput_5m as any[]).map((x: any) => x.rows || 1), 1);
+                  const h2 = Math.max(4, Math.round(((m.rows || 0) / max) * 130));
+                  return (
+                    <div key={m.minute} className="flex-1 flex flex-col items-center justify-end">
+                      <div className="w-full bg-jingtian rounded-t" style={{ height: `${h2}px` }} title={`${m.minute}: ${m.rows}行`}></div>
+                      <span className="text-[10px] text-ink-soft mt-1">{m.minute}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="h-36 flex items-center justify-center text-ink-soft text-sm">
+                暂无近期吞吐量数据，请先上传文件触发导入
+              </div>
+            )}
             <div className="flex gap-4 mt-3 text-sm text-ink-soft">
               <span>5min: {phase?.throughput?.rows_5m ?? 0} 行</span>
               <span>15min: {phase?.throughput?.rows_15m ?? 0} 行</span>
@@ -181,23 +187,23 @@ export default function MonitorV4Page() {
               <th className="text-right px-4 py-2">最大</th>
             </tr></thead>
             <tbody>
-              {(phase?.phase_stats || [])
+              {((phase?.phase_stats || phase?.phases || []) as any[])
                 .filter((x: any) => PHASE_ORDER.includes(x.phase))
                 .sort((a: any, b: any) => PHASE_ORDER.indexOf(a.phase) - PHASE_ORDER.indexOf(b.phase))
                 .map((s: any) => (
                   <tr key={s.phase} className="border-t border-line">
                     <td className="px-4 py-2 font-medium">{PHASE_LABELS[s.phase] || s.phase}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{s.samples}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{s.total_rows}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{s.min_ms}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{s.avg_ms}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-jingtian font-semibold">{s.p50_ms}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-amber-600">{s.p95_ms}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-red-600">{s.p99_ms}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{s.max_ms}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{s.total_rows ?? s.totalRows ?? 0}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{s.min_ms ?? s.min ?? 0}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{s.avg_ms ?? s.avg ?? 0}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-jingtian font-semibold">{s.p50_ms ?? s.p50 ?? 0}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-amber-600">{s.p95_ms ?? s.p95 ?? 0}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-red-600">{s.p99_ms ?? s.p99 ?? 0}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{s.max_ms ?? s.max ?? 0}</td>
                   </tr>
                 ))}
-              {(phase?.phase_stats || []).length === 0 && <tr><td colSpan={9} className="text-center py-8 text-ink-soft">暂无阶段耗时数据，请先上传文件触发导入</td></tr>}
+              {((phase?.phase_stats || phase?.phases || []) as any[]).length === 0 && <tr><td colSpan={9} className="text-center py-8 text-ink-soft">暂无阶段耗时数据，请先上传文件触发导入</td></tr>}
             </tbody>
           </table>
         </Section>
