@@ -133,6 +133,20 @@ export default function ImportV4Page() {
       fd.append("file", file);
       if (chosenRuleId && !chosenRuleId.startsWith("new:")) {
         fd.append("ruleId", chosenRuleId);
+      } else if (chosenRuleId?.startsWith("new:") && analysis?.config) {
+        // 第一次提交"AI 推断的新规则"时，连同规则配置一起发给后端，
+        // 后端会在 import_rules 表里落库（替代旧的"永不入库"问题）
+        try {
+          fd.append(
+            "newRule",
+            JSON.stringify({
+              name: analysis.name || "AI 推断规则",
+              description: `AI 自动推断 · 置信度 ${analysis.confidence ?? "—"} · ${analysis.source}`,
+              fileType: analysis.fileType,
+              config: analysis.config,
+            })
+          );
+        } catch { /* 序列化失败时静默，后端会回落到 defaultRule */ }
       }
       // 90秒超时（Vercel Serverless 冷启动可能慢，但最多 60s，超时给更宽容的边界）
       const ctrl = new AbortController();

@@ -29,11 +29,38 @@ export async function POST(req: NextRequest) {
   await initDb();
   const form = await req.formData();
   const file = form.get("file") as File | null;
-  const ruleId = (form.get("ruleId") as string) || null;
+  let ruleId = (form.get("ruleId") as string) || null;
   const fileType = (form.get("fileType") as string) || (file?.name?.endsWith(".pdf") ? "pdf" : "excel");
+  const newRuleJson = (form.get("newRule") as string) || null;
 
   if (!file) {
     return NextResponse.json({ error: "缺少上传文件" }, { status: 400 });
+  }
+
+  // === V4 修复：第一次提交"AI 推断的新规则"时，先落库到 import_rules，再使用真实 ruleId ===
+  // 旧版本只接受已有 ruleId，导致 chosenRuleId.startsWith("new:") 时整条 AI 规则被静默丢弃
+  if (!ruleId && newRuleJson) {
+    try {
+      const newRule = JSON.parse(newRuleJson);
+      if (newRule?.config) {
+        const newId = `rule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        await query(
+          `INSERT INTO import_rules (id, name, description, file_type, config) VALUES ($1, $2, $3, $4, $5)`,
+          [
+            newId,
+            String(newRule.name || "AI 推断规则").slice(0, 100),
+            String(newRule.description || "AI 自动推断").slice(0, 500),
+            newRule.fileType || fileType,
+            JSON.stringify(newRule.config),
+          ]
+        );
+        ruleId = newId;
+        console.log(JSON.stringify({ stage: "import.new_rule_saved", ruleId, name: newRule.name }));
+      }
+    } catch (e: any) {
+      console.error("[import-tasks] save newRule failed:", e?.message);
+      // 落库失败也不阻塞导入：ruleId 保持 null，后端回落 defaultRule()
+    }
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -108,7 +135,31 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   const traceId = `trace-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
   // 4. 事务：只写 task + batches（占位空 payload）+ outbox，不写 payload 避免大 JSON 序列化阻塞
+  //    V4 优化：用多行 INSERT 把原本 2N 次往返压成 2 次（10k 行 / 10 units 从 ~21 次往返降到 3 次）
   const unitMeta: Array<{ unitId: string; unitIndex: number; unitRows: ParsedRow[] }> = [];
+  const batchValues: string[] = [];
+  const outboxValues: string[] = [];
+  const batchParams: any[] = [];
+  const outboxParams: any[] = [];
+  for (let i = 0; i < totalUnits; i++) {
+    const unitId = `${taskId}-u${i}`;
+    const start = i * UNIT_ROW_LIMIT;
+    const end = Math.min(start + UNIT_ROW_LIMIT, rows.length);
+    const unitRows = rows.slice(start, end);
+    unitMeta.push({ unitId, unitIndex: i, unitRows });
+
+    const o = i * 5;
+    batchValues.push(`($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},'pending',0,'',NOW(),NOW())`);
+    batchParams.push(unitId, taskId, i, start, end);
+
+    const oo = i * 3;
+    outboxValues.push(`('import_task',$${oo + 1},'unit_enqueued',$${oo + 2}::jsonb,'pending',NOW(),NOW())`);
+    outboxParams.push(
+      taskId,
+      JSON.stringify({ taskId, unitId, unitIndex: i, rowStart: start, rowEnd: end })
+    );
+  }
+
   await withTx(async (tx: any) => {
     await tx.unsafe(
       `INSERT INTO import_tasks
@@ -117,26 +168,22 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
       [taskId, fileName, buffer.length, fileType, ruleId, rows.length, totalUnits, traceId]
     );
 
-    for (let i = 0; i < totalUnits; i++) {
-      const unitId = `${taskId}-u${i}`;
-      const start = i * UNIT_ROW_LIMIT;
-      const end = Math.min(start + UNIT_ROW_LIMIT, rows.length);
-      const unitRows = rows.slice(start, end);
-      unitMeta.push({ unitId, unitIndex: i, unitRows });
-
-      // 写占位 batch（空 payload，后续异步补）
+    // 多行 INSERT batches（一次往返）
+    if (batchValues.length > 0) {
       await tx.unsafe(
         `INSERT INTO import_task_batches
           (id, task_id, unit_index, row_start, row_end, status, attempt, unit_payload, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,'pending',0,'',NOW(),NOW())`,
-        [unitId, taskId, i, start, end]
+         VALUES ${batchValues.join(",")}`,
+        batchParams
       );
-
+    }
+    // 多行 INSERT outbox（一次往返）
+    if (outboxValues.length > 0) {
       await tx.unsafe(
         `INSERT INTO event_outbox
           (aggregate_type, aggregate_id, event_type, payload, status, created_at, updated_at)
-         VALUES ('import_task',$1,'unit_enqueued',$2,'pending',NOW(),NOW())`,
-        [taskId, JSON.stringify({ taskId, unitId, unitIndex: i, rowStart: start, rowEnd: end })]
+         VALUES ${outboxValues.join(",")}`,
+        outboxParams
       );
     }
   });
