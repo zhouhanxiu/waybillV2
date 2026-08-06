@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getCached, setCached } from "@/lib/redis";
 
 // V4 异步导入监控概览：任务数、吞吐、错误率、最近任务、性能分布
 export async function GET(req: NextRequest) {
+  const cacheKey = "monitor:summary";
+  const cached = await getCached<{
+    generated_at: string;
+    tasks: any;
+    performance: any;
+    recent_tasks: any[];
+    throughput_by_hour: any[];
+  }>(cacheKey);
+  if (cached) {
+    return NextResponse.json({ ...cached, cached: true });
+  }
+
   const db = getDb();
   try {
     const taskAgg = await db.unsafe(`
@@ -46,13 +59,15 @@ export async function GET(req: NextRequest) {
       ORDER BY hour
     `);
 
-    return NextResponse.json({
+    const payload = {
       generated_at: new Date().toISOString(),
       tasks: taskAgg[0] || {},
       performance: perf[0] || {},
       recent_tasks: recent,
       throughput_by_hour: byHour,
-    });
+    };
+    await setCached(cacheKey, payload);
+    return NextResponse.json(payload);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

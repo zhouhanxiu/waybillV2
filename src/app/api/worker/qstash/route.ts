@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Receiver } from "@upstash/qstash";
 import { processUnit } from "@/lib/worker/processUnit";
+import { tryLockUnit, releaseUnitLock } from "@/lib/redis";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -43,17 +44,26 @@ export async function POST(req: NextRequest) {
   const verifyMs = Date.now() - rt0;
   console.log(JSON.stringify({ stage: "qstash.callback", unitId: job?.unitId, verifyMs }));
 
-  // 2. 调 processUnit（内部已做 attempt 幂等保护）
+  // 2. Redis 幂等锁（双保险，防 QStash 重试造成的重复消费；PG 抢占仍兜底）
+  const locked = await tryLockUnit(job.unitId);
+  if (!locked) {
+    console.log(JSON.stringify({ stage: "qstash.skipped_duplicated", unitId: job.unitId, totalMs: Date.now() - rt0 }));
+    return NextResponse.json({ ok: true, unitId: job.unitId, deduplicated: true });
+  }
+
+  // 3. 调 processUnit（内部已做 attempt 幂等保护）
   try {
     await processUnit(job.taskId, job.unitId);
     console.log(JSON.stringify({ stage: "qstash.done", unitId: job.unitId, totalMs: Date.now() - rt0 }));
     return NextResponse.json({ ok: true, unitId: job.unitId });
   } catch (err: any) {
     console.error("[qstash] processUnit failed", job.unitId, err?.message);
-    // 返回 5xx → QStash 按 retries 自动重试
+    // 返回 5xx → QStash 按 retries 自动重试（锁已释放，重试可重新抢占）
     return NextResponse.json(
       { ok: false, error: String(err?.message || err) },
       { status: 500 }
     );
+  } finally {
+    await releaseUnitLock(job.unitId);
   }
 }

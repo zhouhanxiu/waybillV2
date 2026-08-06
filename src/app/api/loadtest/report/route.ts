@@ -126,8 +126,8 @@ ${d.errDist.length ? rows(d.errDist, ["error_code", "count"], (r) => [r.error_co
 ## 6. 架构说明
 
 - 上传接口 fire-and-forget 接受即返回 task_id（≤1s）
-- 后台并发消费单元（LIMIT 3），单元内批量 SKU 校验 + 批量 UPSERT
-- Vercel Cron（每分钟）兜底未完成任务
+- 后台 QStash 队列异步并发消费单元，单元内批量 SKU 校验 + 批量 UPSERT
+- Outbox 模式 + PostgreSQL 原子抢占保证幂等，QStash 回调验签 + Redis 锁双保险去重
 - SKU 校验超 3s 自动降级为本地格式校验，流程不中断
 `;
 }

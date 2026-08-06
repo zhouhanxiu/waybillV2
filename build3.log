@@ -1,4 +1,17 @@
-﻿node.exe : $ next build
+﻿✓ Lockfile passes supply-chain policies (verified 15h ago)
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Progress: resolved 29, reused 28, downloaded 0, added 0
+Progress: resolved 100, reused 65, downloaded 0, added 0
+Progress: resolved 365, reused 268, downloaded 2, added 0
+Packages: +2
+++
+Progress: resolved 539, reused 434, downloaded 2, added 2, done
+
+dependencies:
++ @upstash/redis 1.38.2
+
+Done in 4.6s using pnpm v11.10.0
+node.exe : $ next build
 所在位置 C:\nvm4w\nodejs\pnpm.ps1:16 字符: 5
 +     & "$basedir/node$exe"  "$basedir/node_modules/pnpm/bin/pnpm.mjs"  ...
 +     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -28,15 +41,15 @@ Import trace:
     ./src/app/api/fixture/route.ts
 
 
-✓ Compiled successfully in 3.0s
+✓ Compiled successfully in 3.7s
   Running TypeScript ...
-  Finished TypeScript in 3.5s ...
+  Finished TypeScript in 3.8s ...
   Collecting page data using 15 workers ...
   Generating static pages using 15 workers (0/35) ...
   Generating static pages using 15 workers (8/35) 
   Generating static pages using 15 workers (17/35) 
   Generating static pages using 15 workers (26/35) 
-✓ Generating static pages using 15 workers (35/35) in 337ms
+✓ Generating static pages using 15 workers (35/35) in 324ms
   Finalizing page optimization ...
 
 Route (app)
