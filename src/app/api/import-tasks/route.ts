@@ -117,6 +117,7 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   if (totalRows === 0) {
     return NextResponse.json({ error: "文件中未解析出任何数据行" }, { status: 422 });
   }
+  console.log(JSON.stringify({ stage: "import.parse", taskId: null, fileName, totalRows, readMs, parseMs }));
 
   // 切片成处理单元
   const units: Array<{ unitIndex: number; unitRows: any[] }> = [];
@@ -157,6 +158,7 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
       );
     }
   });
+  console.log(JSON.stringify({ stage: "import.tx_commit", taskId, units: units.length, txMs: Date.now() - parseMs - readMs }));
 
   // 解析阶段性能日志（parse 阶段 = 读表 + 规则映射，按整任务维度记录，unit_id 用 taskId 标记）
   // 考试要求：每个阶段（解析/校验/落库）的耗时都要可观测、可统计分位。
@@ -187,7 +189,9 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   if (useQstash) {
     try {
       const { dispatchOnce } = await import("@/lib/queue/outbox");
+      const dT0 = Date.now();
       await dispatchOnce();
+      console.log(JSON.stringify({ stage: "import.dispatch", taskId, dispatchMs: Date.now() - dT0, backend: "qstash" }));
     } catch (err: any) {
       console.error("[import-tasks] qstash dispatch error", taskId, err?.message);
     }
@@ -200,6 +204,7 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   }
 
   const elapsed = Date.now() - t0;
+  console.log(JSON.stringify({ stage: "import.accepted", taskId, acceptedInMs: elapsed, backend: useQstash ? "qstash" : "sync" }));
   return NextResponse.json({
     taskId,
     traceId,

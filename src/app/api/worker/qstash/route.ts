@@ -19,6 +19,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  const rt0 = Date.now();
   // 1. 验签
   const signature = req.headers.get("upstash-signature");
   const rawBody = await req.text();
@@ -39,10 +40,13 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     return NextResponse.json({ error: "bad signature/payload: " + err.message }, { status: 401 });
   }
+  const verifyMs = Date.now() - rt0;
+  console.log(JSON.stringify({ stage: "qstash.callback", unitId: job?.unitId, verifyMs }));
 
   // 2. 调 processUnit（内部已做 attempt 幂等保护）
   try {
     await processUnit(job.taskId, job.unitId);
+    console.log(JSON.stringify({ stage: "qstash.done", unitId: job.unitId, totalMs: Date.now() - rt0 }));
     return NextResponse.json({ ok: true, unitId: job.unitId });
   } catch (err: any) {
     console.error("[qstash] processUnit failed", job.unitId, err?.message);

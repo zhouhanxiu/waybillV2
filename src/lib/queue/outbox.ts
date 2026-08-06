@@ -27,6 +27,7 @@ export async function stopOutboxDispatcher() {
 
 /** 手动触发一次投递（供 Vercel Cron / 路由调用，保证 Serverless 下也能推进） */
 export async function dispatchOnce() {
+    const t0 = Date.now();
     const pending = await query<{
       id: number;
       aggregate_id: string;
@@ -36,17 +37,22 @@ export async function dispatchOnce() {
        WHERE status='pending' AND next_retry_at <= NOW()
        ORDER BY created_at ASC LIMIT 100`
     );
+    let sent = 0;
+    let failed = 0;
     try {
       for (const ev of pending) {
         const p = ev.payload;
         if (!p?.taskId || !p?.unitId) {
           await query(`UPDATE event_outbox SET status='failed' WHERE id=$1`, [ev.id]);
+          failed++;
           continue;
         }
         try {
           await enqueueUnit({ taskId: p.taskId, unitId: p.unitId, unitIndex: p.unitIndex });
           await query(`UPDATE event_outbox SET status='sent', updated_at=NOW() WHERE id=$1`, [ev.id]);
+          sent++;
         } catch (err) {
+          failed++;
           const retry = (await query<{ c: number }>(`SELECT retry_count AS c FROM event_outbox WHERE id=$1`, [ev.id]))[0]?.c ?? 0;
           const backoff = Math.min(30000, 1000 * 2 ** retry);
           await query(
@@ -57,5 +63,15 @@ export async function dispatchOnce() {
       }
     } catch (err) {
       console.error("[outbox] dispatch error", err);
+    } finally {
+      const dur = Date.now() - t0;
+      console.log(JSON.stringify({
+        stage: "outbox.dispatch",
+        pending: pending.length,
+        sent,
+        failed,
+        durationMs: dur,
+        throughput: dur > 0 ? Math.round((sent / dur) * 1000 * 100) / 100 : 0,
+      }));
     }
 }

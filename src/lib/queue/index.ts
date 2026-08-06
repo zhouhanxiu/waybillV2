@@ -100,8 +100,9 @@ function ensureQstash(): Client {
 }
 
 function qstashWorkerUrl(): string {
-  const base = (process.env.APP_BASE_URL || process.env.VERCEL_URL || "").replace(/\/$/, "");
-  if (!base) throw new Error("APP_BASE_URL / VERCEL_URL 未配置，无法确定 QStash 回调地址");
+  const raw = (process.env.APP_BASE_URL || process.env.VERCEL_URL || "").replace(/\/$/, "");
+  if (!raw) throw new Error("APP_BASE_URL / VERCEL_URL 未配置，无法确定 QStash 回调地址");
+  const base = raw.startsWith("http") ? raw : `https://${raw}`;
   return `${base}/api/worker/qstash`;
 }
 
@@ -120,13 +121,16 @@ export async function enqueueUnit(job: UnitJob): Promise<void> {
   }
   if (backend === "qstash") {
     // 幂等键用 unitId，QStash 同一 messageId 不重复投递
+    const t0 = Date.now();
+    const url = qstashWorkerUrl();
     await ensureQstash().publishJSON({
-      url: qstashWorkerUrl(),
+      url,
       body: job,
       messageId: job.unitId,
       retries: 3,
       delay: 0,
     });
+    console.log(JSON.stringify({ stage: "qstash.publish", taskId: job.taskId, unitId: job.unitId, url, publishMs: Date.now() - t0 }));
     return;
   }
   // memory

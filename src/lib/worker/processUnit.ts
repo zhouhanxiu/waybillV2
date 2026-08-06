@@ -64,6 +64,7 @@ export async function processUnit(
   }
 
   const startedAt = Date.now();
+  console.log(JSON.stringify({ stage: "unit.start", taskId, unitId, attempt, rows: parsed?.length }));
   let parsed: any[];
   try {
     parsed = JSON.parse(Buffer.from(payloadB64, "base64").toString("utf-8"));
@@ -168,6 +169,7 @@ export async function processUnit(
     }
     const dur = Date.now() - t0;
     await logPerf(taskId, unitId, "sku_validate", skuSet.length, dur);
+    console.log(JSON.stringify({ stage: "unit.sku_validate", taskId, unitId, skuCount: skuSet.length, durationMs: dur, degraded }));
   }
 
   // SKU 未命中 → 行级错误 E003，并从 validRows 剔除
@@ -206,6 +208,7 @@ export async function processUnit(
     }
     const dur = Date.now() - t0;
     await logPerf(taskId, unitId, "db_upsert", finalValid.length, dur);
+    console.log(JSON.stringify({ stage: "unit.db_upsert", taskId, unitId, rows: finalValid.length, durationMs: dur }));
   }
 
   // ── 写入行级错误明细 ──
@@ -238,6 +241,16 @@ export async function processUnit(
     errors: rowErrors.length,
   });
 
+  console.log(JSON.stringify({
+    stage: "unit.done",
+    taskId,
+    unitId,
+    durationMs,
+    upserted,
+    errors: rowErrors.length,
+    degraded,
+    throughputRps: durationMs > 0 ? Math.round((upserted / durationMs) * 1000 * 100) / 100 : 0,
+  }));
   return { successRows: upserted, errorRows: rowErrors.length, degraded };
 }
 
