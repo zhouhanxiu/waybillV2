@@ -10,7 +10,7 @@ type Task = {
   status: string;
   total_rows: number;
   success_rows: number;
-  failed_rows: number;
+  error_rows: number;
   created_at: string;
   finished_at: string | null;
 };
@@ -85,7 +85,7 @@ export default function TasksPage() {
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">{t.total_rows}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-green-600">{t.success_rows}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-red-600">{t.failed_rows}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-red-600">{t.error_rows}</td>
                   <td className="px-4 py-3 text-ink-soft">{new Date(t.created_at).toLocaleString()}</td>
                   <td className="px-4 py-3 text-right">
                     <Link href={`/tasks/${t.id}`} className="text-jingtian hover:underline">详情</Link>

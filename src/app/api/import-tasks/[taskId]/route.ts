@@ -21,7 +21,7 @@ export async function GET(
       `SELECT status, COUNT(*)::int AS cnt,
               SUM(total_rows)::int AS total_rows,
               SUM(success_rows)::int AS success_rows,
-              SUM(failed_rows)::int AS failed_rows,
+              SUM(error_rows)::int AS error_rows,
               SUM(processed_rows)::int AS processed_rows
        FROM import_task_batches WHERE task_id = $1 GROUP BY status`,
       [taskId]
@@ -32,9 +32,9 @@ export async function GET(
     );
     const perfAgg = await db.unsafe(
       `SELECT COUNT(*)::int AS units,
-              SUM(processing_ms)::int AS total_ms,
-              AVG(processing_ms)::int AS avg_ms,
-              MAX(processing_ms)::int AS max_ms
+              SUM(duration_ms)::int AS total_ms,
+              AVG(duration_ms)::int AS avg_ms,
+              MAX(duration_ms)::int AS max_ms
        FROM batch_performance_log WHERE task_id = $1`,
       [taskId]
     );
@@ -46,12 +46,12 @@ export async function GET(
         count: b.cnt,
         total_rows: b.total_rows || 0,
         success_rows: b.success_rows || 0,
-        failed_rows: b.failed_rows || 0,
+        error_rows: b.error_rows || 0,
         processed_rows: b.processed_rows || 0,
       };
       total += b.total_rows || 0;
       success += b.success_rows || 0;
-      failed += b.failed_rows || 0;
+      failed += b.error_rows || 0;
       processed += b.processed_rows || 0;
     }
 
@@ -60,7 +60,7 @@ export async function GET(
       summary: {
         total_rows: total,
         success_rows: success,
-        failed_rows: failed,
+        error_rows: failed,
         processed_rows: processed,
         error_records: errCount[0]?.cnt || 0,
         by_status: byStatus,

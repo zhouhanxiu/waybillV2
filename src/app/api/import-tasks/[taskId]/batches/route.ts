@@ -25,7 +25,7 @@ export async function GET(
       args
     );
     const rows = await db.unsafe(
-      `SELECT id, unit_index, status, total_rows, success_rows, failed_rows,
+      `SELECT id, unit_index, status, total_rows, success_rows, error_rows,
               processed_rows, attempt, created_at, updated_at, error_message
        FROM import_task_batches
        WHERE ${whereSql}

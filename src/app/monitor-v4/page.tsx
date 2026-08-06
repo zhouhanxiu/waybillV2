@@ -56,7 +56,7 @@ export default function MonitorV4Page() {
   const p = data?.performance || {};
   const totalRows = t.total_rows || 0;
   const okRate = totalRows ? Math.round(((t.success_rows || 0) / totalRows) * 100) : 0;
-  const errRate = totalRows ? Math.round(((t.failed_rows || 0) / totalRows) * 100) : 0;
+  const errRate = totalRows ? Math.round(((t.error_rows || 0) / totalRows) * 100) : 0;
 
   const backlog = phase?.backlog || {};
   const pendingRows = (backlog.batches_pending || 0) * 1000; // 估算积压行数
@@ -153,7 +153,7 @@ export default function MonitorV4Page() {
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums">{r.total_rows}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-green-600">{r.success_rows}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-red-600">{r.failed_rows}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-red-600">{r.error_rows}</td>
                     <td className="px-4 py-2 text-ink-soft">{new Date(r.created_at).toLocaleString()}</td>
                     <td className="px-4 py-2 text-right"><Link href={`/tasks/${r.id}`} className="text-jingtian hover:underline">详情</Link></td>
                   </tr>

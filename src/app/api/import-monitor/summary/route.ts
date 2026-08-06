@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
         SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END)::int AS failed,
         SUM(total_rows)::int AS total_rows,
         SUM(success_rows)::int AS success_rows,
-        SUM(failed_rows)::int AS failed_rows
+        SUM(error_rows)::int AS error_rows
       FROM import_tasks
     `);
 
@@ -35,14 +35,14 @@ export async function GET(req: NextRequest) {
       SELECT
         COUNT(*)::int AS units,
         SUM(total_rows)::int AS rows_processed,
-        AVG(processing_ms)::int AS avg_ms,
-        MAX(processing_ms)::int AS max_ms,
-        PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY processing_ms)::int AS p95_ms
+        AVG(duration_ms)::int AS avg_ms,
+        MAX(duration_ms)::int AS max_ms,
+        PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms)::int AS p95_ms
       FROM batch_performance_log
     `);
 
     const recent = await db.unsafe(`
-      SELECT id, file_name, status, total_rows, success_rows, failed_rows,
+      SELECT id, file_name, status, total_rows, success_rows, error_rows,
              created_at, finished_at
       FROM import_tasks
       ORDER BY created_at DESC

@@ -229,7 +229,7 @@ export async function GET(req: NextRequest) {
   // 无 taskId → 返回任务列表（供 /tasks 页面）
   if (!taskId) {
     const rows = await query<any>(
-      `SELECT id, file_name, status, total_rows, success_rows, failed_rows, created_at, finished_at
+      `SELECT id, file_name, status, total_rows, success_rows, error_rows, created_at, finished_at
        FROM import_tasks ORDER BY created_at DESC LIMIT 50`
     );
     return NextResponse.json({ tasks: rows });

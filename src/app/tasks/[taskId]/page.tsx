@@ -8,7 +8,7 @@ import { Loader2, AlertCircle, CheckCircle2, Layers, GitBranch, RefreshCw } from
 type Summary = {
   total_rows: number;
   success_rows: number;
-  failed_rows: number;
+  error_rows: number;
   processed_rows: number;
   error_records: number;
   by_status: Record<string, any>;
@@ -83,7 +83,7 @@ export default function TaskDetailPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <Stat label="总进度" value={`${pct}%`} icon={<Layers className="w-4 h-4" />} />
         <Stat label="成功行" value={`${s.success_rows}`} sub={`${okPct}%`} color="text-green-600" icon={<CheckCircle2 className="w-4 h-4" />} />
-        <Stat label="失败行" value={`${s.failed_rows}`} color="text-red-600" icon={<AlertCircle className="w-4 h-4" />} />
+        <Stat label="失败行" value={`${s.error_rows}`} color="text-red-600" icon={<AlertCircle className="w-4 h-4" />} />
         <Stat label="错误明细" value={`${s.error_records}`} color="text-amber-600" icon={<AlertCircle className="w-4 h-4" />} />
       </div>
 
@@ -138,7 +138,7 @@ export default function TaskDetailPage() {
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums">{b.total_rows}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-green-600">{b.success_rows}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-red-600">{b.failed_rows}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-red-600">{b.error_rows}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{b.attempt}</td>
                 </tr>
               ))}
