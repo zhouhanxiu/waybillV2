@@ -13,7 +13,8 @@
     "migrate:v4": "tsx scripts/migrate-v4.ts",
     "seed:data": "tsx scripts/seed-data.ts",
     "loadtest": "tsx scripts/loadtest.ts",
-    "report:perf": "tsx scripts/report-perf.ts"
+    "report:perf": "tsx scripts/report-perf.ts",
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.8",

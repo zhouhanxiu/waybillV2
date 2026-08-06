@@ -1,0 +1,23 @@
+﻿node.exe : $ tsx --test tests/*.test.ts
+所在位置 C:\nvm4w\nodejs\pnpm.ps1:16 字符: 5
++     & "$basedir/node$exe"  "$basedir/node_modules/pnpm/bin/pnpm.mjs"  ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ tsx --test tests/*.test.ts:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+✔ 合法数据：A组(门店)完整 → 无错误 (1.0373ms)
+✔ B组(收件人)完整、A组空 → 无错误 (0.2246ms)
+✔ 收货信息两组都缺 → 报错 (0.1817ms)
+✔ 电话格式错误 → 报错 (0.1345ms)
+✔ 同批外部编码重复 → 第二条报错 (0.1397ms)
+✔ 与已存在数据重复 → 报错 (0.1024ms)
+✔ SKU 数量为非正数 → 报错 (0.2207ms)
+✔ 无 SKU 物品 → 报错 (0.1651ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 580.8368

@@ -3,11 +3,13 @@
  */
 import { NextResponse } from "next/server";
 import { initDb } from "@/lib/db";
+import { migrateV4 } from "@/lib/db/migrate-v4";
 
 export async function GET() {
   try {
     await initDb();
-    return NextResponse.json({ status: "ok", message: "database initialized" });
+    await migrateV4();
+    return NextResponse.json({ status: "ok", message: "database initialized (V3 + V4)" });
   } catch (err: any) {
     console.error("DB init error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });

@@ -1,0 +1,33 @@
+﻿node.exe : $ tsx scripts/seed-data.ts
+所在位置 C:\nvm4w\nodejs\pnpm.ps1:16 字符: 5
++     & "$basedir/node$exe"  "$basedir/node_modules/pnpm/bin/pnpm.mjs"  ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ tsx scripts/seed-data.ts:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+生成 20000 条 SKU 主数据...
+
+  SKU: 1000/20000
+  SKU: 2000/20000
+  SKU: 3000/20000
+  SKU: 4000/20000
+  SKU: 5000/20000
+  SKU: 6000/20000
+  SKU: 7000/20000
+  SKU: 8000/20000
+  SKU: 9000/20000
+  SKU: 10000/20000
+  SKU: 11000/20000
+  SKU: 12000/20000
+  SKU: 13000/20000
+  SKU: 14000/20000
+  SKU: 15000/20000
+  SKU: 16000/20000
+  SKU: 17000/20000
+  SKU: 18000/20000
+  SKU: 19000/20000
+  SKU: 20000/20000
+SKU 主数据完成
+生成 10000 行运单明细 xlsx（含 ~5% 非法 SKU，单号前缀 EXT）...
+xlsx 已生成: C:\Users\ztocc\CodeBuddy\20260704155001\scripts\fixtures\waybills-10000.xlsx
+标准压测文件已生成: C:\Users\ztocc\CodeBuddy\20260704155001\test-data\10000-orders.xlsx
