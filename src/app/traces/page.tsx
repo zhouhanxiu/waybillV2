@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, GitBranch, Search, ArrowLeft } from "lucide-react";
+import { Loader2, GitBranch, Search, ArrowLeft, RefreshCw, Clock, ChevronRight } from "lucide-react";
 
 function TracesInner() {
   const sp = useSearchParams();
+  const router = useRouter();
   const [taskId, setTaskId] = useState(sp.get("taskId") || "");
   const [traceId, setTraceId] = useState("");
   const [errorCode, setErrorCode] = useState(sp.get("error_code") || "");
@@ -15,6 +16,18 @@ function TracesInner() {
   const [errors, setErrors] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedTrace, setSelectedTrace] = useState<string | null>(null);
+  const [recentTasks, setRecentTasks] = useState<any[]>([]);
+
+  // 进入页面：拉取最近 10 个任务（默认没有任何 taskId 时的引导）
+  const loadRecentTasks = useCallback(async () => {
+    try {
+      const r = await fetch("/api/import-tasks?limit=10");
+      if (r.ok) {
+        const d = await r.json();
+        setRecentTasks(d.tasks || []);
+      }
+    } catch {}
+  }, []);
 
   const search = useCallback(async () => {
     setLoading(true);
@@ -41,8 +54,18 @@ function TracesInner() {
 
   useEffect(() => {
     if (taskId || errorCode) search();
+    else loadRecentTasks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const openTask = (id: string) => {
+    setTaskId(id);
+    setTraceId("");
+    setErrorCode("");
+    const u = new URLSearchParams();
+    u.set("taskId", id);
+    router.replace(`/traces?${u.toString()}`);
+  };
 
   const openTrace = async (id: string) => {
     setSelectedTrace(id);
@@ -60,6 +83,9 @@ function TracesInner() {
       <div className="flex items-center gap-2 mb-6">
         <GitBranch className="w-6 h-6 text-jingtian" />
         <h1 className="text-xl font-bold text-ink">Trace 检索</h1>
+        <button onClick={() => { if (taskId || errorCode) search(); else loadRecentTasks(); }} className="ml-auto p-2 rounded-lg hover:bg-bg text-ink-soft" title="刷新">
+          <RefreshCw className="w-4 h-4" />
+        </button>
       </div>
 
       <div className="bg-white rounded-xl border border-line p-4 mb-6 flex flex-wrap gap-2 items-end">
@@ -133,8 +159,12 @@ function TracesInner() {
             {spans.length === 0 && <div className="text-ink-soft text-sm">无 span</div>}
           </div>
         </div>
-      ) : (
+      ) : traces.length > 0 ? (
         <div className="bg-white rounded-xl border border-line overflow-hidden">
+          <div className="px-4 py-3 flex items-center gap-2 border-b border-line">
+            <span className="text-sm font-semibold">任务 <span className="font-mono text-jingtian">{taskId.slice(0, 16)}</span> 的 Trace 链路</span>
+            <span className="text-sm text-ink-soft">（{traces.length} 条）</span>
+          </div>
           <table className="w-full text-sm">
             <thead className="bg-bg text-ink-soft"><tr>
               <th className="text-left px-4 py-2">Trace ID</th>
@@ -158,9 +188,56 @@ function TracesInner() {
                   <td className="px-4 py-2 text-right text-jingtian">查看</td>
                 </tr>
               ))}
-              {traces.length === 0 && !loading && <tr><td colSpan={6} className="text-center py-8 text-ink-soft">按任务 ID 或 Trace ID 查询</td></tr>}
             </tbody>
           </table>
+        </div>
+      ) : (
+        // 默认状态：显示最近 10 个任务，点一个进入该任务的 trace 列表
+        <div className="bg-white rounded-xl border border-line overflow-hidden">
+          <div className="px-4 py-3 flex items-center gap-2 border-b border-line">
+            <Clock className="w-4 h-4 text-ink-soft" />
+            <span className="text-sm font-semibold">最近导入任务</span>
+            <span className="text-sm text-ink-soft">（点击查看该任务的 trace 链路）</span>
+          </div>
+          {recentTasks.length === 0 ? (
+            <div className="text-center py-12 text-ink-soft text-sm">
+              暂无任务。请先到 <Link href="/" className="text-jingtian underline">V4 智能导入</Link> 上传文件。
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-bg text-ink-soft"><tr>
+                <th className="text-left px-4 py-2">任务 ID</th>
+                <th className="text-left px-4 py-2">文件名</th>
+                <th className="text-left px-4 py-2">状态</th>
+                <th className="text-right px-4 py-2">总行数</th>
+                <th className="text-right px-4 py-2">成功</th>
+                <th className="text-right px-4 py-2">失败</th>
+                <th className="text-left px-4 py-2">开始</th>
+                <th className="px-4 py-2"></th>
+              </tr></thead>
+              <tbody>
+                {recentTasks.map((t) => (
+                  <tr key={t.id} className="border-t border-line hover:bg-bg cursor-pointer" onClick={() => openTask(t.id)}>
+                    <td className="px-4 py-2 font-mono text-xs">{t.id.slice(0, 16)}…</td>
+                    <td className="px-4 py-2 max-w-[220px] truncate">{t.file_name}</td>
+                    <td className="px-4 py-2">
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        t.status === 'completed' ? 'bg-green-100 text-green-700' :
+                        t.status === 'failed' ? 'bg-red-100 text-red-700' :
+                        t.status === 'processing' ? 'bg-blue-100 text-blue-700' :
+                        'bg-amber-100 text-amber-700'
+                      }`}>{t.status}</span>
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums">{t.total_rows?.toLocaleString() || 0}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-green-600">{t.success_rows?.toLocaleString() || 0}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-red-600">{t.error_rows?.toLocaleString() || 0}</td>
+                    <td className="px-4 py-2 text-ink-soft text-xs">{new Date(t.created_at).toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right text-jingtian"><ChevronRight className="w-4 h-4" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>
