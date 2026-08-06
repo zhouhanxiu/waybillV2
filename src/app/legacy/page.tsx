@@ -43,7 +43,7 @@ export default function LegacyImportPage() {
       </div>
       <h1 className="text-2xl font-bold text-ink mb-2">V2 旧版同步导入</h1>
       <p className="text-sm text-ink-soft mb-6">
-        走 4 步同步流程（上传 → AI 分析 → 预览编辑 → 提交）。仅适合小批量（< 500 行），大量数据请使用 <Link href="/" className="text-jingtian underline">V4 异步导入</Link>。
+        走 4 步同步流程（上传 → AI 分析 → 预览编辑 → 提交）。仅适合小批量（{'<'} 500 行），大量数据请使用 <Link href="/" className="text-jingtian underline">V4 异步导入</Link>。
       </p>
 
       <div className="bg-white rounded-2xl border border-line p-8">

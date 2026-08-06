@@ -19,10 +19,10 @@ export async function GET(
     const task = tasks[0];
     const batches = await db.unsafe(
       `SELECT status, COUNT(*)::int AS cnt,
-              SUM(total_rows)::int AS total_rows,
+              SUM(GREATEST(row_end - row_start + 1, 0))::int AS total_rows,
               SUM(success_rows)::int AS success_rows,
               SUM(error_rows)::int AS error_rows,
-              SUM(processed_rows)::int AS processed_rows
+              (SUM(success_rows) + SUM(error_rows))::int AS processed_rows
        FROM import_task_batches WHERE task_id = $1 GROUP BY status`,
       [taskId]
     );
