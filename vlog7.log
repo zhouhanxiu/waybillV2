@@ -1,0 +1,115 @@
+﻿node.exe : npm warn Unknown project config "node-linker". This will stop working in the next major version of npm. See 
+`npm help npmrc` for supported config options.
+所在位置 行:1 字符: 1
++ & "C:\nvm4w\nodejs/node.exe" "C:\nvm4w\nodejs/node_modules/npm/bin/np ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm warn Unknow...config options.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Vercel CLI 58.7.1 (Node.js 24.14.1)
+Resolving deployment "20260704155001.vercel.app"
+Fetching project "prj_YKqh0BUFTJnh9Eg99LGFiwaZp4Ay"
+Fetching logs...
+TIME         HOST                       LEVEL                        
+12:38:10.12  20260704155001.vercel.app  error  λ GET /api/loadtest   
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "waybill_snapshots" already e
+xists, skipping',   file: 'parse_utilcmd.c',   line: '207',   routine: 'transformCreateStmt' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "uq_task_unit" already exists
+, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_batches_task" already ex
+ists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "waybill_item_snapshots" alre
+ady exists, skipping',   file: 'parse_utilcmd.c',   line: '207',   routine: 'transformCreateStmt' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "import_task_errors" already 
+exists, skipping',   file: 'parse_utilcmd.c',   line: '207',   routine: 'transformCreateStmt' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_snapshots_external" alre
+ady exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42701',   message: 'column "snapshot_id" of relation "wayb
+ill_item_snapshots" already exists, skipping',   file: 'tablecmds.c',   line: '7471',   routine: 'check_for_column_name
+_collision' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_item_snapshots_snap" alr
+eady exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "import_rules" already exists
+, skipping',   file: 'parse_utilcmd.c',   line: '207',   routine: 'transformCreateStmt' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "sku_master" already exists, 
+skipping',   file: 'parse_utilcmd.c',   line: '207',   routine: 'transformCreateStmt' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "import_batches" already exis
+ts, skipping',   file: 'parse_utilcmd.c',   line: '207',   routine: 'transformCreateStmt' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "uq_sku_master_code" already 
+exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_sku_master_name" already
+ exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "waybills" already exists, sk
+ipping',   file: 'parse_utilcmd.c',   line: '207',   routine: 'transformCreateStmt' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "import_tasks" already exists
+, skipping',   file: 'parse_utilcmd.c',   line: '207',   routine: 'transformCreateStmt' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42701',   message: 'column "trace_id" of relation "import_
+tasks" already exists, skipping',   file: 'tablecmds.c',   line: '7471',   routine: 'check_for_column_name_collision' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_import_tasks_trace_id" a
+lready exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "order_items" already exists,
+ skipping',   file: 'parse_utilcmd.c',   line: '207',   routine: 'transformCreateStmt' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_import_tasks_status" alr
+eady exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_import_tasks_created" al
+ready exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_waybills_batch" already 
+exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_waybills_external" alrea
+dy exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_order_items_waybill" alr
+eady exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "import_task_batches" already
+ exists, skipping',   file: 'parse_utilcmd.c',   line: '207',   routine: 'transformCreateStmt' }
+{"stage":"import.parse","taskId":null,"fileName":"10000-orders.xlsx","totalRows":10000,"readMs":938,"parseMs":959}
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_errors_task" already exi
+sts, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_errors_unit" already exi
+sts, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_errors_code" already exi
+sts, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "event_outbox" already exists
+, skipping',   file: 'parse_utilcmd.c',   line: '207',   routine: 'transformCreateStmt' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_outbox_pending" already 
+exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "batch_performance_log" alrea
+dy exists, skipping',   file: 'parse_utilcmd.c',   line: '207',   routine: 'transformCreateStmt' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_perf_task_unit" already 
+exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_perf_task_phase" already
+ exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{"stage":"outbox.dispatch","pending":0,"sent":0,"failed":0,"durationMs":153,"throughput":0}
+{"stage":"unit.start","taskId":"task-1785991094334-vnuzxn","unitId":"task-1785991094334-vnuzxn-u0","attempt":1,"rows":1
+0000}
+{"stage":"unit.sku_validate","taskId":"task-1785991094334-vnuzxn","unitId":"task-1785991094334-vnuzxn-u0","skuCount":0,
+"durationMs":307,"degraded":false}
+unit failed task-1785991094334-vnuzxn-u0 MAX_PARAMETERS_EXCEEDED: Max number of parameters (65534) exceeded
+{"stage":"import.accepted","taskId":"task-1785991094334-vnuzxn","acceptedInMs":9751,"backend":"sync"}
+{"stage":"import.tx_commit","taskId":"task-1785991094334-vnuzxn","units":1,"txMs":1785991095934}
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_import_tasks_rule" alrea
+dy exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+[instrumentation] V4 migration done
+[instrumentation] V4 worker mode=cron, skip memory pump (Cron route consumes)
+[outbox] dispatcher started, interval=2000ms
+[instrumentation] V4 outbox dispatcher started
+{"stage":"outbox.dispatch","pending":1,"sent":0,"failed":1,"durationMs":463,"throughput":0}
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "trace_events" already exists
+, skipping',   file: 'parse_utilcmd.c',   line: '207',   routine: 'transformCreateStmt' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_trace_task" already exis
+ts, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_trace_id" already exists
+, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42701',   message: 'column "level" of relation "trace_even
+ts" already exists, skipping',   file: 'tablecmds.c',   line: '7471',   routine: 'check_for_column_name_collision' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42701',   message: 'column "message" of relation "trace_ev
+ents" already exists, skipping',   file: 'tablecmds.c',   line: '7471',   routine: 'check_for_column_name_collision' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42701',   message: 'column "timestamp" of relation "trace_
+events" already exists, skipping',   file: 'tablecmds.c',   line: '7471',   routine: 'check_for_column_name_collision' 
+}
+{"stage":"outbox.dispatch","pending":0,"sent":0,"failed":0,"durationMs":153,"throughput":0}
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "uq_waybills_biz_key" already
+ exists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+{   severity_local: 'NOTICE',   severity: 'NOTICE',   code: '42P07',   message: 'relation "idx_waybills_sku" already ex
+ists, skipping',   file: 'index.c',   line: '889',   routine: 'index_create' }
+
+Fetched 1 logs for zhous-projects-daecd222/20260704155001

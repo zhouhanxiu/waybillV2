@@ -51,8 +51,9 @@ export async function dispatchOnce() {
           await enqueueUnit({ taskId: p.taskId, unitId: p.unitId, unitIndex: p.unitIndex });
           await query(`UPDATE event_outbox SET status='sent', updated_at=NOW() WHERE id=$1`, [ev.id]);
           sent++;
-        } catch (err) {
+        } catch (err: any) {
           failed++;
+          console.error("[outbox] enqueueUnit failed", p?.taskId, p?.unitId, err?.message, err?.cause?.message);
           const retry = (await query<{ c: number }>(`SELECT retry_count AS c FROM event_outbox WHERE id=$1`, [ev.id]))[0]?.c ?? 0;
           const backoff = Math.min(30000, 1000 * 2 ** retry);
           await query(
