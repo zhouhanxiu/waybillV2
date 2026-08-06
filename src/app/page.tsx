@@ -164,7 +164,7 @@ export default function ImportV4Page() {
         <AnalyzedCard
           state={state}
           rules={rules}
-          onChangeRule={(id) => setState({ ...state, chosenRuleId: id } as any)}
+          onChangeRule={(id: string) => setState({ ...state, chosenRuleId: id } as any)}
           onSubmit={submitImport}
           onReset={reset}
         />
@@ -267,7 +267,7 @@ function AnalyzedCard({ state, rules, onChangeRule, onSubmit, onReset }: any) {
             <option value={`new:${analysis.name || "AI 推断规则"}`}>
               ✨ 使用 AI 推断的新规则（{analysis.name || "未命名"}）
             </option>
-            {rules.map((r: RuleItem) => (
+            {rules.map((r: any) => (
               <option key={r.id} value={r.id}>
                 📋 {r.name}{r.name === analysis.name ? "（与 AI 推荐一致）" : ""}
               </option>
