@@ -124,8 +124,9 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   if (ruleId) {
     const r = await query<{ config: any }>(`SELECT config FROM import_rules WHERE id=$1`, [ruleId]);
     if (r[0]) {
-      rule = { id: ruleId, config: typeof r[0].config === 'string' ? JSON.parse(r[0].config) : r[0].config } as ParseRule;
-      console.log(`[runImport] rule config type=${typeof r[0].config}, engine=${rule.config.engine}, mappingsLen=${rule.config.fieldMappings?.length}, structure=${JSON.stringify(rule.config.structure)}`);
+      // PostgreSQL JSONB 可能返回字符串，需要反序列化
+      const config = typeof r[0].config === 'string' ? JSON.parse(r[0].config) : r[0].config;
+      rule = { id: ruleId, config } as ParseRule;
     }
   }
   if (!rule) rule = defaultRule();
@@ -141,13 +142,13 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   const rawInfo = { rawLen: rawRows?.length, isArr: Array.isArray(rawRows), hdr: rawRows?.[0], row1: rawRows?.[1]?.slice?.(0, 3), bufferLen: buffer?.length };
   console.log(`[runImport] ${JSON.stringify(rawInfo)}`);
   if (!Array.isArray(rawRows) || rawRows.length <= 1) {
-    return NextResponse.json({ error: "文件中未解析出任何数据行", debug: rawInfo }, { status: 422 });
+    return NextResponse.json({ error: "文件中未解析出任何数据行" }, { status: 422 });
   }
 
   const parsed = parseFile(rawRows, rule);
   const rows = parsed.rows;
   if (rows.length === 0) {
-    return NextResponse.json({ error: "文件中未解析出任何数据行", debug: { parsedRows: rows.length, rawRows: rawRows.length, warnings: parsed.warnings, ruleEngine: rule.config.engine, mappingsLen: rule.config.fieldMappings?.length, dataStartRow: rule.config.structure?.dataStartRow } }, { status: 422 });
+    return NextResponse.json({ error: "文件中未解析出任何数据行" }, { status: 422 });
   }
 
   // 3. 切片
