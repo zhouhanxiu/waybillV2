@@ -45,16 +45,26 @@ export async function POST(req: NextRequest) {
     }
 
     let rule;
+    let source: "matched" | "ai" | "local" = "ai";
     try {
-      rule = matchKnownFileRule(rows, fileType, file.name) || await analyzeFileAndGenerateRule(previewText);
+      const matched = matchKnownFileRule(rows, fileType, file.name);
+      if (matched) {
+        rule = matched;
+        source = "matched";
+      } else {
+        rule = await analyzeFileAndGenerateRule(previewText);
+        source = "ai";
+      }
     } catch (aiErr) {
       console.warn("AI 分析失败，使用本地兜底规则:", aiErr);
       rule = generateLocalRule(rows, fileType);
+      source = "local";
     }
 
     return NextResponse.json({
       ...rule,
       fileType,
+      source,
     });
   } catch (err: any) {
     console.error("POST /api/analyze error:", err);
