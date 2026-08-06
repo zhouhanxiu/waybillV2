@@ -64,7 +64,19 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  return runImport(buffer, file.name, fileType, ruleId);
+  try {
+    return await runImport(buffer, file.name, fileType, ruleId);
+  } catch (e: any) {
+    console.error("[import-tasks] runImport failed:", e?.message, e?.stack?.split("\n")?.slice(0, 5));
+    return NextResponse.json(
+      {
+        error: "导入失败",
+        detail: String(e?.message || e),
+        stage: "runImport",
+      },
+      { status: 500 }
+    );
+  }
 }
 
 function defaultRule(): ParseRule {
@@ -161,30 +173,49 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   }
 
   await withTx(async (tx: any) => {
-    await tx.unsafe(
-      `INSERT INTO import_tasks
-        (id, file_name, file_size, file_type, rule_id, total_rows, total_units, status, trace_id, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'uploaded',$8,NOW(),NOW())`,
-      [taskId, fileName, buffer.length, fileType, ruleId, rows.length, totalUnits, traceId]
-    );
+    try {
+      await tx.unsafe(
+        `INSERT INTO import_tasks
+          (id, file_name, file_size, file_type, rule_id, total_rows, total_units, status, trace_id, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'uploaded',$8,NOW(),NOW())`,
+        [taskId, fileName, buffer.length, fileType, ruleId, rows.length, totalUnits, traceId]
+      );
+    } catch (e: any) {
+      console.error("[import-tasks] task insert failed:", e?.message);
+      throw e;
+    }
 
     // 多行 INSERT batches（一次往返）
     if (batchValues.length > 0) {
-      await tx.unsafe(
-        `INSERT INTO import_task_batches
-          (id, task_id, unit_index, row_start, row_end, status, attempt, unit_payload, created_at, updated_at)
-         VALUES ${batchValues.join(",")}`,
-        batchParams
-      );
+      try {
+        await tx.unsafe(
+          `INSERT INTO import_task_batches
+            (id, task_id, unit_index, row_start, row_end, status, attempt, unit_payload, created_at, updated_at)
+           VALUES ${batchValues.join(",")}`,
+          batchParams
+        );
+      } catch (e: any) {
+        console.error("[import-tasks] batches insert failed:", e?.message, {
+          totalUnits, batchCount: batchValues.length, paramCount: batchParams.length,
+        });
+        throw e;
+      }
     }
     // 多行 INSERT outbox（一次往返）
     if (outboxValues.length > 0) {
-      await tx.unsafe(
-        `INSERT INTO event_outbox
-          (aggregate_type, aggregate_id, event_type, payload, status, created_at, updated_at)
-         VALUES ${outboxValues.join(",")}`,
-        outboxParams
-      );
+      try {
+        await tx.unsafe(
+          `INSERT INTO event_outbox
+            (aggregate_type, aggregate_id, event_type, payload, status, created_at, updated_at)
+           VALUES ${outboxValues.join(",")}`,
+          outboxParams
+        );
+      } catch (e: any) {
+        console.error("[import-tasks] outbox insert failed:", e?.message, {
+          totalUnits, outboxCount: outboxValues.length, paramCount: outboxParams.length,
+        });
+        throw e;
+      }
     }
   });
 
