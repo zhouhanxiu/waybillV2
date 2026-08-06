@@ -147,75 +147,35 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   const traceId = `trace-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
   // 4. 事务：只写 task + batches（占位空 payload）+ outbox，不写 payload 避免大 JSON 序列化阻塞
-  //    V4 优化：用多行 INSERT 把原本 2N 次往返压成 2 次（10k 行 / 10 units 从 ~21 次往返降到 3 次）
   const unitMeta: Array<{ unitId: string; unitIndex: number; unitRows: ParsedRow[] }> = [];
-  const batchValues: string[] = [];
-  const outboxValues: string[] = [];
-  const batchParams: any[] = [];
-  const outboxParams: any[] = [];
-  for (let i = 0; i < totalUnits; i++) {
-    const unitId = `${taskId}-u${i}`;
-    const start = i * UNIT_ROW_LIMIT;
-    const end = Math.min(start + UNIT_ROW_LIMIT, rows.length);
-    const unitRows = rows.slice(start, end);
-    unitMeta.push({ unitId, unitIndex: i, unitRows });
-
-    const o = i * 5;
-    batchValues.push(`($${o + 1},$${o + 2},$${o + 3},$${o + 4},$${o + 5},'pending',0,'',NOW(),NOW())`);
-    batchParams.push(unitId, taskId, i, start, end);
-
-    const oo = i * 3;
-    outboxValues.push(`('import_task',$${oo + 1},'unit_enqueued',$${oo + 2}::jsonb,'pending',NOW(),NOW())`);
-    outboxParams.push(
-      taskId,
-      JSON.stringify({ taskId, unitId, unitIndex: i, rowStart: start, rowEnd: end })
-    );
-  }
-
   await withTx(async (tx: any) => {
-    try {
-      await tx.unsafe(
-        `INSERT INTO import_tasks
-          (id, file_name, file_size, file_type, rule_id, total_rows, total_units, status, trace_id, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'uploaded',$8,NOW(),NOW())`,
-        [taskId, fileName, buffer.length, fileType, ruleId, rows.length, totalUnits, traceId]
-      );
-    } catch (e: any) {
-      console.error("[import-tasks] task insert failed:", e?.message);
-      throw e;
-    }
+    await tx.unsafe(
+      `INSERT INTO import_tasks
+        (id, file_name, file_size, file_type, rule_id, total_rows, total_units, status, trace_id, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'uploaded',$8,NOW(),NOW())`,
+      [taskId, fileName, buffer.length, fileType, ruleId, rows.length, totalUnits, traceId]
+    );
 
-    // 多行 INSERT batches（一次往返）
-    if (batchValues.length > 0) {
-      try {
-        await tx.unsafe(
-          `INSERT INTO import_task_batches
-            (id, task_id, unit_index, row_start, row_end, status, attempt, unit_payload, created_at, updated_at)
-           VALUES ${batchValues.join(",")}`,
-          batchParams
-        );
-      } catch (e: any) {
-        console.error("[import-tasks] batches insert failed:", e?.message, {
-          totalUnits, batchCount: batchValues.length, paramCount: batchParams.length,
-        });
-        throw e;
-      }
-    }
-    // 多行 INSERT outbox（一次往返）
-    if (outboxValues.length > 0) {
-      try {
-        await tx.unsafe(
-          `INSERT INTO event_outbox
-            (aggregate_type, aggregate_id, event_type, payload, status, created_at, updated_at)
-           VALUES ${outboxValues.join(",")}`,
-          outboxParams
-        );
-      } catch (e: any) {
-        console.error("[import-tasks] outbox insert failed:", e?.message, {
-          totalUnits, outboxCount: outboxValues.length, paramCount: outboxParams.length,
-        });
-        throw e;
-      }
+    for (let i = 0; i < totalUnits; i++) {
+      const unitId = `${taskId}-u${i}`;
+      const start = i * UNIT_ROW_LIMIT;
+      const end = Math.min(start + UNIT_ROW_LIMIT, rows.length);
+      const unitRows = rows.slice(start, end);
+      unitMeta.push({ unitId, unitIndex: i, unitRows });
+
+      await tx.unsafe(
+        `INSERT INTO import_task_batches
+          (id, task_id, unit_index, row_start, row_end, status, attempt, unit_payload, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,'pending',0,'',NOW(),NOW())`,
+        [unitId, taskId, i, start, end]
+      );
+
+      await tx.unsafe(
+        `INSERT INTO event_outbox
+          (aggregate_type, aggregate_id, event_type, payload, status, created_at, updated_at)
+         VALUES ('import_task',$1,'unit_enqueued',$2::jsonb,'pending',NOW(),NOW())`,
+        [taskId, JSON.stringify({ taskId, unitId, unitIndex: i, rowStart: start, rowEnd: end })]
+      );
     }
   });
 
