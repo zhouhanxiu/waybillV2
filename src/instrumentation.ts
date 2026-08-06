@@ -21,17 +21,23 @@ export async function register() {
 
   try {
     // WORKER_MODE=cron：纯 Vercel 生产，不启动内存 pump，消费交给 /api/worker/cron（Vercel Cron 触发）
+    // WORKER_MODE=qstash：消费由 /api/worker/qstash 回调完成，startWorker 仅登记 worker 函数
     // 其他（默认/auto）：启动内存 pump 即时消费（本地开发、Railway 常驻）
     const workerMode = process.env.WORKER_MODE || "auto";
-    if (workerMode !== "cron") {
-      const { startWorker } = await import("@/lib/queue");
-      const { processUnit } = await import("@/lib/worker/processUnit");
-      await startWorker(async (job) => {
-        await processUnit(job.taskId, job.unitId);
-      });
-      console.log("[instrumentation] V4 worker started (memory pump)");
-    } else {
+    const { startWorker } = await import("@/lib/queue");
+    const { processUnit } = await import("@/lib/worker/processUnit");
+    const workerFn = async (job: { taskId: string; unitId: string }) => {
+      await processUnit(job.taskId, job.unitId);
+    };
+    if (workerMode === "cron") {
       console.log("[instrumentation] V4 worker mode=cron, skip memory pump (Cron route consumes)");
+    } else {
+      await startWorker(workerFn);
+      if (workerMode === "qstash") {
+        console.log("[instrumentation] V4 worker mode=qstash, registered for /api/worker/qstash callback");
+      } else {
+        console.log("[instrumentation] V4 worker started (memory pump)");
+      }
     }
   } catch (err) {
     console.error("[instrumentation] V4 worker start failed", err);

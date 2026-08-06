@@ -180,13 +180,24 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
     [traceId, taskId, `接收导入：file=${fileName} rows=${totalRows} units=${units.length}`, readMs + parseMs]
   );
 
-  // Outbox 已在同一事务写入 pending 事件，保证事件可靠（进程重启可恢复）。
-  // 纯 Vercel 方案：HTTP 返回后 Vercel Function 进程立即冻结，fire-and-forget 无法继续。
-  // 因此同步消费全部单元——1万行 / 10 单元，每单元 <1s，整体远小于 60s 函数上限。
-  // 这同时满足：上传即返回（含消费整体 <60s 完成）+ Outbox 兜底（请求失败事件仍可重投）。
-  await consumeAllUnits(taskId).catch((err) =>
-    console.error("[import-tasks] background consume error", taskId, err?.message)
-  );
+  // QStash 模式：事件已写入 event_outbox，触发一次 dispatcher 把事件投递到 QStash，
+  // 由 /api/worker/qstash 回调异步消费（Serverless 原生、带平台重试）。
+  // 非 QStash 模式（memory/cron）：同步消费全部单元（1万行单单元场景整体 <60s）。
+  const useQstash = (process.env.QUEUE_BACKEND || "memory") === "qstash";
+  if (useQstash) {
+    try {
+      const { dispatchOnce } = await import("@/lib/queue/outbox");
+      await dispatchOnce();
+    } catch (err: any) {
+      console.error("[import-tasks] qstash dispatch error", taskId, err?.message);
+    }
+  } else {
+    // 纯 Vercel 方案：HTTP 返回后 Vercel Function 进程立即冻结，fire-and-forget 无法继续。
+    // 因此同步消费全部单元——1万行 / 10 单元，每单元 <1s，整体远小于 60s 函数上限。
+    await consumeAllUnits(taskId).catch((err) =>
+      console.error("[import-tasks] background consume error", taskId, err?.message)
+    );
+  }
 
   const elapsed = Date.now() - t0;
   return NextResponse.json({
