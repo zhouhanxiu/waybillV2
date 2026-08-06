@@ -11,7 +11,9 @@ import { processUnit } from "@/lib/worker/processUnit";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const UNIT_ROW_LIMIT = parseInt(process.env.UNIT_ROW_LIMIT || "1000");
+// 切片粒度：默认 1 万行/批（单单元），减少单元数、降低事务开销，
+// 保证纯 Vercel（maxDuration=60s）下 1 万行同步消费 <60s 完成。
+const UNIT_ROW_LIMIT = parseInt(process.env.UNIT_ROW_LIMIT || "10000");
 
 /**
  * POST /api/import-tasks
@@ -37,6 +39,8 @@ export async function POST(req: NextRequest) {
  * fire-and-forget 与 Cron 路由同时跑也不会双跑同一单元。
  */
 async function consumeAllUnits(taskId: string) {
+  // 每轮最多取 8 个单元并发处理（受 maxDuration=60s 约束），
+  // 1 万行单单元场景 1 轮即可完成；多单元场景也保证高吞吐。
   for (;;) {
     const due = await query<{ id: string }>(
       `SELECT id FROM import_task_batches
@@ -44,7 +48,7 @@ async function consumeAllUnits(taskId: string) {
          AND attempt < 5
          AND (next_retry_at IS NULL OR next_retry_at <= NOW())
        ORDER BY attempt ASC, unit_index ASC
-       LIMIT 3`,
+       LIMIT 8`,
       [taskId]
     );
     if (due.length === 0) break;

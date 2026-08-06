@@ -24,8 +24,8 @@ import { dispatchOnce } from "@/lib/queue/outbox";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-/** 单次 Cron 最多处理的单元数，避免超函数时长 */
-const CRON_BATCH_LIMIT = parseInt(process.env.CRON_BATCH_LIMIT || "4");
+/** 单次 Cron 最多处理的单元数，避免超函数时长（默认 20，足够 1 万行兜底） */
+const CRON_BATCH_LIMIT = parseInt(process.env.CRON_BATCH_LIMIT || "20");
 
 export async function GET(req: NextRequest) {
   // 鉴权：Vercel Cron 自动触发时带 `Authorization: Bearer $CRON_SECRET`（平台内置变量）
