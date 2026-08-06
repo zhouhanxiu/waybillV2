@@ -56,7 +56,13 @@ async function consumeAllUnits(taskId: string) {
   }
 }
 
-/** 默认规则（压测/通用 Excel：列顺序 单号,门店,收件人,电话,地址,SKU编码,名称,数量） */
+/**
+ * 默认规则（与 scripts/seed-data.ts 生成的压测文件列序严格对齐）
+ * 压测文件实际列序（7列）：
+ *   0:单号  1:收件人  2:电话  3:地址  4:商品编码  5:商品名称  6:数量
+ * 注意：压测文件走 B 组（收件人+电话+地址），无 store_name（A 组），
+ * 因此校验逻辑靠 B 组通过；sku_code/sku_name/quantity 分别取自 4/5/6 列。
+ */
 function defaultRule(): ParseRule {
   return {
     id: "default",
@@ -66,13 +72,12 @@ function defaultRule(): ParseRule {
       structure: { titleRow: 1, dataStartRow: 2 },
       fieldMappings: [
         { target: "external_code", source: "column", value: 0 },
-        { target: "store_name", source: "column", value: 1 },
-        { target: "receiver_name", source: "column", value: 2 },
-        { target: "receiver_phone", source: "column", value: 3, transform: "phone" },
-        { target: "receiver_address", source: "column", value: 4 },
-        { target: "sku_code", source: "column", value: 5 },
-        { target: "sku_name", source: "column", value: 6 },
-        { target: "quantity", source: "column", value: 7, transform: "number" },
+        { target: "receiver_name", source: "column", value: 1 },
+        { target: "receiver_phone", source: "column", value: 2, transform: "phone" },
+        { target: "receiver_address", source: "column", value: 3 },
+        { target: "sku_code", source: "column", value: 4 },
+        { target: "sku_name", source: "column", value: 5 },
+        { target: "quantity", source: "column", value: 6, transform: "number" },
       ],
     },
   } as ParseRule;

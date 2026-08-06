@@ -6,7 +6,8 @@
  * 即使 Redis 不可用，系统靠 PG 也能跑（所有调用都 try/catch 降级到无缓存）。
  *
  * 环境变量：
- *   REDIS_REST_URL / REDIS_REST_TOKEN  —— Upstash Redis REST 端点（与 QStash 同账号）
+ *   REDIS_REST_URL / REDIS_REST_TOKEN            —— Upstash Redis REST 端点（与 QStash 同账号）
+ *   UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN —— Upstash 控制台默认导出名（自动兼容）
  *   REDIS_TTL_SECONDS                  —— 监控缓存 TTL（默认 8s）
  */
 import { Redis } from "@upstash/redis";
@@ -15,8 +16,9 @@ let client: Redis | null = null;
 
 export function getRedis(): Redis | null {
   if (client) return client;
-  const url = process.env.REDIS_REST_URL;
-  const token = process.env.REDIS_REST_TOKEN;
+  // 兼容两种变量名前缀：REDIS_REST_* 与 UPSTASH_REDIS_REST_*（控制台默认导出）
+  const url = process.env.REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.REDIS_REST_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) {
     // 未配置：返回 null，调用方降级为"无 Redis"
     return null;
