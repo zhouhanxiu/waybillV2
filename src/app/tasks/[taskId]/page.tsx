@@ -140,8 +140,8 @@ export default function TaskDetailPage() {
             )}
           </div>
           <h1 className="text-xl font-bold text-ink">{task.filename || task.task_id || taskId}</h1>
-          <div className="text-xs text-ink-soft mt-1 font-mono">
-            {taskId}{task.trace_id && <span className="ml-3">trace: {task.trace_id.slice(0, 16)}…</span>}
+          <div className="text-xs text-ink-soft mt-1 font-mono break-all">
+            {taskId}{task.trace_id && <span className="ml-3">trace: {task.trace_id}</span>}
           </div>
         </div>
         <div className="flex gap-2">
