@@ -42,28 +42,38 @@ export async function processUnit(
   // 只有第一个把 status: pending→processing 的调用者能拿到该单元；其余拿到空行直接跳过。
   // 修复：增加对"卡死 processing"（updated_at > 60s 未更新）的接管，
   //       用于恢复因 Vercel Serverless freeze 导致 fire-and-forget 永久丢失的 unit。
+  //
+  // 关键：使用 PostgreSQL 14+ 兼容的 `UPDATE ... FROM subquery` 写法。
+  // 之前用 `(status_before = 'processing')`（UPDATE 目标表的 OLD value 引用）是 PG 18+ 特性，
+  // Neon 主版本仍是 PG 16/17，会报 `column "status_before" does not exist`：
+  //   - 主查询的 UPDATE 已执行（status='processing' 抢占成功）但 RETURNING 抛错
+  //   - 进入 fallback 重跑同样 WHERE，updated_at 刚被刷新 → 0 行 → claimed.length === 0
+  //   - processUnit 跳过 → unit 永久卡 processing 60 秒后才能再接管，且仍会重蹈覆辙
+  // 改用 CTE 风格的 FROM subquery 后：cur.status 来自 SELECT 时的快照，不依赖 PG 18+。
   const claimed = await query<{
     attempt: number;
     unit_payload: string | null;
     recovered_from_stuck: boolean;
   }>(
-    `UPDATE import_task_batches
-       SET status='processing', attempt=attempt+1, updated_at=NOW()
-     WHERE id=$1 AND (
-       status IN ('pending','failed')
-       OR (status='processing' AND updated_at < NOW() - INTERVAL '60 seconds')
-     )
-     RETURNING attempt, unit_payload,
-       (status_before = 'processing') AS recovered_from_stuck`,
+    `UPDATE import_task_batches b
+       SET status='processing', attempt=COALESCE(b.attempt,0)+1, updated_at=NOW()
+     FROM (SELECT status, updated_at FROM import_task_batches WHERE id=$1) AS cur
+     WHERE b.id = $1
+       AND (
+         cur.status IN ('pending','failed')
+         OR (cur.status='processing' AND cur.updated_at < NOW() - INTERVAL '60 seconds')
+       )
+     RETURNING b.attempt, b.unit_payload,
+       (cur.status='processing') AS recovered_from_stuck`,
     [unitId]
   ).catch(async () => {
-    // 回退：PostgreSQL 不支持 status_before（更老版本），降级为不带恢复标记的版本
+    // 兜底（极少数版本上 FROM 子查询语法变化时降级为最简单形式，无 recovered_from_stuck）
     return query<{
       attempt: number;
       unit_payload: string | null;
     }>(
       `UPDATE import_task_batches
-         SET status='processing', attempt=attempt+1, updated_at=NOW()
+         SET status='processing', attempt=COALESCE(attempt,0)+1, updated_at=NOW()
        WHERE id=$1 AND (
          status IN ('pending','failed')
          OR (status='processing' AND updated_at < NOW() - INTERVAL '60 seconds')
