@@ -55,7 +55,11 @@ function TracesInner() {
       const res = await fetch(`/api/traces?${params.toString()}`);
       if (res.ok) {
         const d = await res.json();
-        if (qTraceId) setSpans(d.spans || []);
+        if (qTraceId) {
+          setSpans(d.spans || []);
+          // traceId 查询命中后把 selectedTrace 设为该 ID，让链路表分支被选中
+          if ((d.spans || []).length > 0) setSelectedTrace(qTraceId);
+        }
         else if (errorCode) setErrors(d.errors || []);
         else setTraces(d.traces || []);
       }
