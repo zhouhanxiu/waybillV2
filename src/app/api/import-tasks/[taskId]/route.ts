@@ -118,25 +118,33 @@ export async function GET(
  * - 超时不会破坏一致性：未完成的 unit 仍为 pending，下次轮询再来驱动。
  */
 async function driveOnePendingUnit(taskId: string): Promise<void> {
-  // 先取出最早一个 pending unit（避免 SELECT FOR UPDATE 阻塞）
+  // 先取出最早一个 pending unit（或卡死 processing，但 updated_at 超 60s）
   const pending = await query<{ id: string; unit_index: number }>(
     `SELECT id, unit_index FROM import_task_batches
-     WHERE task_id = $1 AND status = 'pending'
+     WHERE task_id = $1
+       AND (
+         status = 'pending'
+         OR (status = 'processing' AND updated_at < NOW() - INTERVAL '60 seconds')
+         OR (status = 'failed' AND updated_at < NOW() - INTERVAL '30 seconds')
+       )
      ORDER BY unit_index ASC LIMIT 1`,
     [taskId]
   );
-  if (pending.length === 0) return;
+  if (pending.length === 0) {
+    console.log(JSON.stringify({ stage: "task-get.drive.skip", taskId, reason: "no_pending_or_recoverable" }));
+    return;
+  }
   const unitId = pending[0].id;
 
   const startedAt = Date.now();
-  const work = processUnit(taskId, unitId).catch((err: any) => {
-    console.error("[drive] processUnit failed", taskId, unitId, err?.message || err);
-  });
+  let result: any = null;
+  let error: any = null;
+  const work = processUnit(taskId, unitId)
+    .then((r) => { result = r; })
+    .catch((err: any) => { error = err?.message || String(err); });
   const timeoutP = new Promise<void>((resolve) =>
     setTimeout(resolve, DRIVE_TIMEOUT_MS)
   );
-  // race：work 完成或超时则返回。processUnit 内部已捕获异常，
-  // 所以这里 Promise.race 不需要 catch，但保留 timeout safeguard。
   await Promise.race([work, timeoutP]);
   console.log(
     JSON.stringify({
@@ -145,7 +153,11 @@ async function driveOnePendingUnit(taskId: string): Promise<void> {
       unitId,
       unitIndex: pending[0].unit_index,
       durationMs: Date.now() - startedAt,
-      timedOut: Date.now() - startedAt >= DRIVE_TIMEOUT_MS,
+      timedOut: work.then === undefined ? false : Date.now() - startedAt >= DRIVE_TIMEOUT_MS,
+      successRows: result?.successRows ?? null,
+      errorRows: result?.errorRows ?? null,
+      degraded: result?.degraded ?? null,
+      error,
     })
   );
 }

@@ -40,16 +40,40 @@ export async function processUnit(
 
   // ── 原子抢占单元（防止 fire-and-forget 与 Cron 并发双跑同一单元）──
   // 只有第一个把 status: pending→processing 的调用者能拿到该单元；其余拿到空行直接跳过。
+  // 修复：增加对"卡死 processing"（updated_at > 60s 未更新）的接管，
+  //       用于恢复因 Vercel Serverless freeze 导致 fire-and-forget 永久丢失的 unit。
   const claimed = await query<{
     attempt: number;
     unit_payload: string | null;
+    recovered_from_stuck: boolean;
   }>(
     `UPDATE import_task_batches
        SET status='processing', attempt=attempt+1, updated_at=NOW()
-     WHERE id=$1 AND status IN ('pending','failed')
-     RETURNING attempt, unit_payload`,
+     WHERE id=$1 AND (
+       status IN ('pending','failed')
+       OR (status='processing' AND updated_at < NOW() - INTERVAL '60 seconds')
+     )
+     RETURNING attempt, unit_payload,
+       (status_before = 'processing') AS recovered_from_stuck`,
     [unitId]
-  );
+  ).catch(async () => {
+    // 回退：PostgreSQL 不支持 status_before（更老版本），降级为不带恢复标记的版本
+    return query<{
+      attempt: number;
+      unit_payload: string | null;
+    }>(
+      `UPDATE import_task_batches
+         SET status='processing', attempt=attempt+1, updated_at=NOW()
+       WHERE id=$1 AND (
+         status IN ('pending','failed')
+         OR (status='processing' AND updated_at < NOW() - INTERVAL '60 seconds')
+       )
+       RETURNING attempt, unit_payload`,
+      [unitId]
+    ).then((r) =>
+      r.map((x) => ({ ...x, recovered_from_stuck: false }))
+    );
+  });
 
   if (claimed.length === 0) {
     // 已被其他消费者抢占或已完成 → 幂等跳过
@@ -61,7 +85,13 @@ export async function processUnit(
   const attempt = claimed[0].attempt;
   const payloadB64 = claimed[0].unit_payload;
   if (!payloadB64) {
-    throw new Error(`unit payload empty: ${unitId}`);
+    // payload 缺失：通常是旧版 fire-and-forget 写入失败被 Vercel 冻结。
+    // 不要 throw 让 unit 卡在 processing，直接标记 failed（带原因）让 task 能推进进度。
+    await markUnitFailed(unitId, taskId, "unit payload empty: 服务重启/Vercel冻结导致丢失");
+    await insertTrace(traceId, taskId, unitId, spanRoot + ":payload_lost", "worker", "error", null, null, {
+      recoveredFromStuck: claimed[0].recovered_from_stuck,
+    });
+    return { successRows: 0, errorRows: 0, degraded: false };
   }
 
   const startedAt = Date.now();
