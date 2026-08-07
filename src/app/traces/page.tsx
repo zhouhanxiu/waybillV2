@@ -15,6 +15,7 @@ function TracesInner() {
   const [spans, setSpans] = useState<any[]>([]);
   const [errors, setErrors] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
   const [selectedTrace, setSelectedTrace] = useState<string | null>(null);
   const [recentTasks, setRecentTasks] = useState<any[]>([]);
 
@@ -35,15 +36,26 @@ function TracesInner() {
     setSpans([]);
     setTraces([]);
     setErrors([]);
+    setSearched(true);
     try {
+      // 智能路由：trace- 前缀自动转 traceId 框；task- 前缀强制为 taskId
+      let qTaskId = taskId.trim();
+      let qTraceId = traceId.trim();
+      if (qTaskId.startsWith("trace-") && !qTraceId) {
+        qTraceId = qTaskId; qTaskId = "";
+        setTraceId(qTraceId); setTaskId("");
+      } else if (qTraceId.startsWith("task-") && !qTaskId) {
+        qTaskId = qTraceId; qTraceId = "";
+        setTaskId(qTaskId); setTraceId("");
+      }
       const params = new URLSearchParams();
-      if (traceId) params.set("traceId", traceId);
+      if (qTraceId) params.set("traceId", qTraceId);
       else if (errorCode) params.set("error_code", errorCode);
-      else if (taskId) params.set("taskId", taskId);
+      else if (qTaskId) params.set("taskId", qTaskId);
       const res = await fetch(`/api/traces?${params.toString()}`);
       if (res.ok) {
         const d = await res.json();
-        if (traceId) setSpans(d.spans || []);
+        if (qTraceId) setSpans(d.spans || []);
         else if (errorCode) setErrors(d.errors || []);
         else setTraces(d.traces || []);
       }
@@ -52,31 +64,68 @@ function TracesInner() {
     }
   }, [taskId, traceId, errorCode]);
 
-  // 进入页面 & 任一查询条件变化时：自动查询或加载最近任务
+  // 仅在挂载时根据 URL 参数决定初始态：URL 带 taskId → 自动查；否则显示最近任务
   useEffect(() => {
-    if (taskId || errorCode) {
-      search();
-    } else if (!traceId) {
+    const urlTaskId = sp.get("taskId");
+    const urlErr = sp.get("error_code");
+    if (urlTaskId) {
+      setSearched(true);
+      // 直接走 fetch，避免依赖 search()
+      (async () => {
+        setLoading(true);
+        try {
+          const r = await fetch(`/api/traces?taskId=${encodeURIComponent(urlTaskId)}`);
+          if (r.ok) {
+            const d = await r.json();
+            setTraces(d.traces || []);
+            setTaskId(urlTaskId);
+          }
+        } finally { setLoading(false); }
+      })();
+    } else if (urlErr) {
+      setSearched(true);
+      (async () => {
+        setLoading(true);
+        try {
+          const r = await fetch(`/api/traces?error_code=${encodeURIComponent(urlErr)}`);
+          if (r.ok) {
+            const d = await r.json();
+            setErrors(d.errors || []);
+            setErrorCode(urlErr);
+          }
+        } finally { setLoading(false); }
+      })();
+    } else {
       loadRecentTasks();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId, errorCode]);
+  }, []);
 
   const openTask = (id: string) => {
     setTaskId(id);
     setTraceId("");
     setErrorCode("");
+    setSearched(true);
     const u = new URLSearchParams();
     u.set("taskId", id);
     router.replace(`/traces?${u.toString()}`);
-    // taskId 变化由 useEffect 监听，自动触发 search()
+    (async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/traces?taskId=${encodeURIComponent(id)}`);
+        if (r.ok) {
+          const d = await r.json();
+          setTraces(d.traces || []);
+        }
+      } finally { setLoading(false); }
+    })();
   };
 
   const openTrace = async (id: string) => {
     setSelectedTrace(id);
     setLoading(true);
     try {
-      const res = await fetch(`/api/traces?traceId=${id}`);
+      const res = await fetch(`/api/traces?traceId=${encodeURIComponent(id)}`);
       if (res.ok) { const d = await res.json(); setSpans(d.spans || []); }
     } finally {
       setLoading(false);
@@ -95,12 +144,12 @@ function TracesInner() {
 
       <div className="bg-white rounded-xl border border-line p-4 mb-6 flex flex-wrap gap-2 items-end">
         <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs text-ink-soft mb-1">任务 ID</label>
-          <input value={taskId} onChange={(e) => setTaskId(e.target.value)} placeholder="按任务列出 trace" className="w-full px-3 py-2 rounded-lg border border-line text-sm" />
+          <label className="block text-xs text-ink-soft mb-1">任务 ID <span className="text-[10px] text-ink-soft/70">（task- 开头）</span></label>
+          <input value={taskId} onChange={(e) => setTaskId(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} placeholder="如 task-1786073173201-av8mhd" className="w-full px-3 py-2 rounded-lg border border-line text-sm font-mono" />
         </div>
         <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs text-ink-soft mb-1">Trace ID</label>
-          <input value={traceId} onChange={(e) => setTraceId(e.target.value)} placeholder="精确查看 span 链路" className="w-full px-3 py-2 rounded-lg border border-line text-sm" />
+          <label className="block text-xs text-ink-soft mb-1">Trace ID <span className="text-[10px] text-ink-soft/70">（trace- 开头）</span></label>
+          <input value={traceId} onChange={(e) => setTraceId(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} placeholder="如 trace-1786086753374-xfbob87c1" className="w-full px-3 py-2 rounded-lg border border-line text-sm font-mono" />
         </div>
         <button onClick={search} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-jingtian text-white text-sm hover:bg-jingtian-dark">
           <Search className="w-4 h-4" /> 查询
@@ -195,6 +244,16 @@ function TracesInner() {
               ))}
             </tbody>
           </table>
+        </div>
+      ) : searched ? (
+        <div className="bg-white rounded-xl border border-line p-10 text-center">
+          <div className="text-ink-soft text-sm">未找到匹配的 Trace</div>
+          <div className="text-xs text-ink-soft mt-2">
+            {taskId && <span>任务 ID：<span className="font-mono">{taskId}</span> 不存在或没有 trace 记录。</span>}
+            {traceId && <span>Trace ID：<span className="font-mono">{traceId}</span> 不存在。</span>}
+            {errorCode && <span>错误码：<span className="font-mono">{errorCode}</span> 暂无错误记录。</span>}
+          </div>
+          <button onClick={loadRecentTasks} className="mt-4 text-sm text-jingtian hover:underline">返回最近任务列表</button>
         </div>
       ) : (
         // 默认状态：显示最近 10 个任务，点一个进入该任务的 trace 列表
