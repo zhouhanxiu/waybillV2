@@ -1,0 +1,6 @@
+﻿### Result
+"{\"status\":\"ok\",\"service\":\"ai-waybill-import-v2\",\"timestamp\":\"2026-08-06T13:29:20.060Z\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => ((async()=>{ const buf=await fetch(\'https://20260704155001.vercel.app/api/health\').then(r=>r.text()); return buf; })())');
+```

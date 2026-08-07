@@ -1,0 +1,150 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]: AI
+        - heading "万能导入智能多格式批量下单系统" [level=1] [ref=e6]
+    - generic [ref=e7]:
+      - complementary [ref=e8]:
+        - generic [ref=e9]:
+          - generic [ref=e10]:
+            - generic [ref=e11]: AI
+            - generic [ref=e12]: 万能导入
+          - navigation [ref=e13]:
+            - link "V4 智能导入" [ref=e14] [cursor=pointer]:
+              - /url: /
+              - img [ref=e15]
+              - text: V4 智能导入
+            - link "导入任务" [ref=e18] [cursor=pointer]:
+              - /url: /tasks
+              - img [ref=e19]
+              - text: 导入任务
+            - link "压测验证" [ref=e22] [cursor=pointer]:
+              - /url: /loadtest
+              - img [ref=e23]
+              - text: 压测验证
+            - link "监控看板" [ref=e26] [cursor=pointer]:
+              - /url: /monitor-v4
+              - img [ref=e27]
+              - text: 监控看板
+            - link "Trace 检索" [ref=e29] [cursor=pointer]:
+              - /url: /traces
+              - img [ref=e30]
+              - text: Trace 检索
+            - link "运单列表" [ref=e34] [cursor=pointer]:
+              - /url: /waybills
+              - img [ref=e35]
+              - text: 运单列表
+            - link "规则管理" [ref=e40] [cursor=pointer]:
+              - /url: /rules
+              - img [ref=e41]
+              - text: 规则管理
+            - link "V2 旧版" [ref=e44] [cursor=pointer]:
+              - /url: /legacy
+              - img [ref=e45]
+              - text: V2 旧版
+      - main [ref=e48]:
+        - generic [ref=e49]:
+          - generic [ref=e50]:
+            - img [ref=e51]
+            - heading "V4 智能导入（AI 识别 · 选已有规则跳过 · ≤1秒返回）" [level=1] [ref=e53]
+          - paragraph [ref=e54]: 上传文件 → AI 自动识别列结构 → 可选已有规则（跳过AI）→ 提交后 ≤1秒拿到 taskId，后台异步处理
+          - generic [ref=e55]:
+            - generic [ref=e56]:
+              - img [ref=e128]
+              - heading "AI 识别结果" [level=2] [ref=e130]
+              - generic [ref=e131]: 已选已有规则 · 跳过 AI
+            - generic [ref=e71]:
+              - generic [ref=e132]:
+                - generic [ref=e133]: 文件名
+                - generic [ref=e134]: 10000-orders.xlsx
+              - generic [ref=e135]:
+                - generic [ref=e136]: 文件类型
+                - generic [ref=e137]: EXCEL
+              - generic [ref=e138]:
+                - generic [ref=e139]: 建议规则名
+                - generic [ref=e140]: 本地默认规则
+              - generic [ref=e141]:
+                - generic [ref=e142]: 置信度
+                - generic [ref=e143]: —
+            - generic [ref=e144]:
+              - generic [ref=e145]: 使用规则
+              - generic [ref=e146]:
+                - combobox [disabled] [ref=e147]:
+                  - option "✨ AI 推断的新规则（本地默认规则）"
+                  - option "──────────────" [disabled]
+                  - option "📋 物流出库单解析规则（行式表格）"
+                  - option "📋 本地默认规则 （与 AI 推荐一致）" [selected]
+                  - option "📋 物流出库单解析规则-标准行表格"
+                  - option "📋 标准行表格配送单（单号+收件人信息+SKU明细）"
+                  - option "📋 标准行式出库单（单号+收件人信息+SKU列表）"
+                  - option "📋 本地默认规则 （与 AI 推荐一致）"
+                  - option "📋 本地默认规则 （与 AI 推荐一致）"
+                  - option "📋 黎明屯配送发货单"
+                  - option "📋 黔寨寨配送单PDF 副本"
+                  - option "📋 黔寨寨配送单PDF"
+                  - option "📋 黔寨寨配送单PDF"
+                  - option "📋 欢乐牧场库存分货表"
+                  - option "📋 黔寨寨配送单PDF"
+                  - option "📋 黔寨寨配送单PDF"
+                  - option "📋 多门店分Sheet出库单"
+                - img
+              - paragraph [ref=e148]: ✅ 已选已有规则，提交时直接复用，无需重复 AI 分析
+            - generic [ref=e149]:
+              - button "重新选择文件" [disabled] [ref=e150]
+              - button "提交中…" [disabled] [ref=e154]:
+                - img [ref=e155]
+                - text: 提交中…
+          - generic [ref=e83]:
+            - generic [ref=e84]:
+              - generic [ref=e85]: "1"
+              - generic [ref=e86]:
+                - generic [ref=e87]:
+                  - img [ref=e88]
+                  - text: 上传文件
+                - generic [ref=e91]: xlsx / xls / csv / pdf
+            - generic [ref=e92]:
+              - generic [ref=e93]: "2"
+              - generic [ref=e94]:
+                - generic [ref=e95]:
+                  - img [ref=e96]
+                  - text: AI 智能识别
+                - generic [ref=e99]: 自动推断列结构
+            - generic [ref=e100]:
+              - generic [ref=e101]: "3"
+              - generic [ref=e102]:
+                - generic [ref=e103]:
+                  - img [ref=e104]
+                  - text: 选已有规则
+                - generic [ref=e106]: 下拉选已有规则，跳过 AI
+            - generic [ref=e107]:
+              - generic [ref=e108]: "4"
+              - generic [ref=e109]:
+                - generic [ref=e110]:
+                  - img [ref=e111]
+                  - text: ≤1秒返回
+                - generic [ref=e113]: 拿到 taskId，异步处理
+          - generic [ref=e114]:
+            - generic [ref=e115]: 提交后您可以：
+            - list [ref=e116]:
+              - listitem [ref=e117]:
+                - text: 在
+                - link "导入任务" [ref=e118] [cursor=pointer]:
+                  - /url: /tasks
+                - text: 跟踪所有任务进度
+              - listitem [ref=e119]:
+                - text: 在
+                - link "监控看板" [ref=e120] [cursor=pointer]:
+                  - /url: /monitor-v4
+                - text: 查看实时吞吐和阶段耗时
+              - listitem [ref=e121]:
+                - text: 在
+                - link "Trace 检索" [ref=e122] [cursor=pointer]:
+                  - /url: /traces
+                - text: 按任务ID查询完整调用链
+              - listitem [ref=e123]:
+                - text: 在
+                - link "规则管理" [ref=e124] [cursor=pointer]:
+                  - /url: /rules
+                - text: 编辑/复用历史规则
+  - alert [ref=e125]

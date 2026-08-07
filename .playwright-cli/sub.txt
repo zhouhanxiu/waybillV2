@@ -1,0 +1,6 @@
+﻿### Result
+"[{\"ref\":\"<button type=\\\"button\\\" class=\\\"flex-1 py-2.5 rounded-xl bg-jingtian text-white font-medium hover:bg-jingtian-dark disabled:opacity-50 flex items-center \"}]"
+### Ran Playwright code
+```js
+await page.evaluate('() => (JSON.stringify(Array.from(document.querySelectorAll(\'button\')).filter(b=>b.textContent.includes(\'使用 AI\')).map(b=>({ref:b.outerHTML.slice(0,150)}))))');
+```

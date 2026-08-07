@@ -1,0 +1,6 @@
+[  191167ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[  362275ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[  563797ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[  745585ms] [ERROR] Failed to load resource: the server responded with a status of 422 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[  816449ms] [ERROR] Failed to load resource: the server responded with a status of 422 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[  987209ms] [ERROR] Failed to load resource: the server responded with a status of 422 () @ https://20260704155001.vercel.app/api/import-tasks:0

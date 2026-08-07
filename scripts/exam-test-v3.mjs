@@ -16,7 +16,7 @@
 
 // ──── 配置 ────────────────────────────────────────────────────────
 
-let V2_URL = process.env.V2_URL || "https://20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app";
+let V2_URL = process.env.V2_URL || "https://20260704155001-mke1d5yjp-zhous-projects-daecd222.vercel.app";
 let V3_URL = process.env.V3_URL || "https://20260704155001-v3.vercel.app";
 
 const INTERNAL_KEY = "v3-internal-key";

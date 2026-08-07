@@ -1,0 +1,6 @@
+﻿### Result
+"[\"重新选择文件\",\"使用 AI 规则导入（≤1秒返回）\"]"
+### Ran Playwright code
+```js
+await page.evaluate('() => (JSON.stringify(Array.from(document.querySelectorAll(\'button\')).map(b=>b.textContent.slice(0,40).replace(/\\n/g,\' \').trim())))');
+```

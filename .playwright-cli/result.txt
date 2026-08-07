@@ -1,0 +1,12 @@
+﻿### Result
+"{\"url\":\"https://20260704155001.vercel.app/\",\"hasModal\":false}"
+### Ran Playwright code
+```js
+await page.evaluate('() => (JSON.stringify({url:window.location.href,body:text=>document.body.innerText.slice(0,500),hasModal:!!document.querySelector(\'[role=alert]\'),modalText:document.querySelector(\'[role=alert]\')?.textContent?.slice(0,300)}))');
+```
+### Page
+- Page URL: https://20260704155001.vercel.app/
+- Page Title: 万能导入 - AI 智能多格式批量下单系统
+- Console: 1 errors, 0 warnings
+### Events
+- New console entries: .playwright-cli\console-2026-08-06T13-26-01-262Z.log#L1

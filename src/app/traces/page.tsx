@@ -52,11 +52,15 @@ function TracesInner() {
     }
   }, [taskId, traceId, errorCode]);
 
+  // 进入页面 & 任一查询条件变化时：自动查询或加载最近任务
   useEffect(() => {
-    if (taskId || errorCode) search();
-    else loadRecentTasks();
+    if (taskId || errorCode) {
+      search();
+    } else if (!traceId) {
+      loadRecentTasks();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [taskId, errorCode]);
 
   const openTask = (id: string) => {
     setTaskId(id);
@@ -65,6 +69,7 @@ function TracesInner() {
     const u = new URLSearchParams();
     u.set("taskId", id);
     router.replace(`/traces?${u.toString()}`);
+    // taskId 变化由 useEffect 监听，自动触发 search()
   };
 
   const openTrace = async (id: string) => {

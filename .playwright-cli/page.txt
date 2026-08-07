@@ -1,0 +1,6 @@
+﻿### Result
+"{\"url\":\"https://20260704155001.vercel.app/\",\"title\":\"万能导入 - AI 智能多格式批量下单系统\",\"h2\":\"AI 识别结果\",\"btnCount\":3,\"bodyText\":\"AI\\n万能导入智能多格式批量下单系统\\nAI\\n万能导入\\nV4 智能导入\\n导入任务\\n压测验证\\n监控看板\\nTrace 检索\\n运单列表\\n规则管理\\nV2 旧版\\nV4 智能导入（AI 识别 · 选已有规则跳过 · ≤1秒返回）\\n\\n上传文件 → AI 自动识别列结构 → 可选已有规则（跳过AI）→ 提交后 ≤1秒拿到 taskId，后台异步处理\\n\\n操作失败\\n导入失败\\nAI 识别结果\\nAI 推断\\n文件名\\n10000-orders.xlsx\\n文件类型\\nEXCEL\\n建议规则名\\n标准行表格配送单（单号+收货人+SKU）\\n置信度\\n—\\n使用规则\\n✨ AI 推断的新规则（标准行表格配送单（单号+收货人+SKU））\\n──────────────\\n📋 物流出库单解析规则（行式表格）\\n📋 本地默认规则\\n📋 物流出库单解析规则-标准行表格\\n📋 标准行表格配送单（单号+收件人信息+SKU明细）\\n📋 标准行式出库单（单号+收件人信息+SKU列表）\\n📋 本地默认规则\\n📋 本地默认规则\\n📋 黎明屯配送发货单\\n📋 黔寨寨配送单PDF 副本\\n📋 黔寨寨配送单PDF\\n📋 黔寨寨配送单PDF\\n📋 欢乐牧场库存分货\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => (JSON.stringify({url:window.location.href,title:document.title,h2:document.querySelector(\'h2\')?.textContent,btnCount:document.querySelectorAll(\'button\').length,bodyText:document.body.innerText.slice(0,500)}))');
+```

@@ -1,0 +1,58 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]: AI
+        - heading "万能导入智能多格式批量下单系统" [level=1] [ref=e6]
+    - generic [ref=e7]:
+      - complementary [ref=e8]:
+        - generic [ref=e9]:
+          - generic [ref=e10]:
+            - generic [ref=e11]: AI
+            - generic [ref=e12]: 万能导入
+          - navigation [ref=e13]:
+            - link "V4 智能导入" [ref=e14] [cursor=pointer]:
+              - /url: /
+              - img [ref=e15]
+              - text: V4 智能导入
+            - link "导入任务" [ref=e18] [cursor=pointer]:
+              - /url: /tasks
+              - img [ref=e19]
+              - text: 导入任务
+            - link "压测验证" [ref=e22] [cursor=pointer]:
+              - /url: /loadtest
+              - img [ref=e23]
+              - text: 压测验证
+            - link "监控看板" [ref=e26] [cursor=pointer]:
+              - /url: /monitor-v4
+              - img [ref=e27]
+              - text: 监控看板
+            - link "Trace 检索" [ref=e29] [cursor=pointer]:
+              - /url: /traces
+              - img [ref=e30]
+              - text: Trace 检索
+            - link "运单列表" [ref=e34] [cursor=pointer]:
+              - /url: /waybills
+              - img [ref=e35]
+              - text: 运单列表
+            - link "规则管理" [ref=e40] [cursor=pointer]:
+              - /url: /rules
+              - img [ref=e41]
+              - text: 规则管理
+            - link "V2 旧版" [ref=e44] [cursor=pointer]:
+              - /url: /legacy
+              - img [ref=e45]
+              - text: V2 旧版
+      - main [ref=e48]:
+        - generic [ref=e49]:
+          - generic [ref=e50]:
+            - img [ref=e51]
+            - heading "压测验证（考试红线）" [level=1] [ref=e54]
+          - paragraph [ref=e55]:
+            - text: 点击「开始压测」将上传
+            - code [ref=e56]: test-data/10000-orders.xlsx
+            - text: （1万行）到导入流水线， 自动轮询直到完成。验证目标：上传返回 ≤1s、端到端 ≤60s、成功行≈9500（5% 非法 SKU）。
+          - button "开始压测" [ref=e57]:
+            - img [ref=e58]
+            - text: 开始压测
+  - alert [ref=e60]

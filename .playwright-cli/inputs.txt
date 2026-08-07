@@ -1,0 +1,6 @@
+﻿### Result
+"0 inputs; file inputs: 0"
+### Ran Playwright code
+```js
+await page.evaluate('() => (document.querySelectorAll(\'input\').length + \' inputs; file inputs: \' + document.querySelectorAll(\'input[type=file]\').length)');
+```

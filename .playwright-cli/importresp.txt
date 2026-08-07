@@ -1,0 +1,7 @@
+﻿### Error
+Error: TypeError: Cannot read properties of null (reading 'files')
+    at eval (eval at <anonymous> (eval at evaluate (:302:30)), <anonymous>:1:76)
+    at eval (eval at <anonymous> (eval at evaluate (:302:30)), <anonymous>:1:468)
+    at eval (eval at evaluate (:302:30), <anonymous>:2:25)
+    at UtilityScript.evaluate (<anonymous>:304:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)

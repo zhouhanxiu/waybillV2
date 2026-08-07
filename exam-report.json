@@ -1,0 +1,193 @@
+{
+  "timestamp": "2026-08-06T12:26:31.814Z",
+  "V2": "https://20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app",
+  "V3": "https://20260704155001-v3.vercel.app",
+  "points": 60,
+  "totalTests": 36,
+  "passed": 23,
+  "failed": 13,
+  "elapsed": "4.4s",
+  "grade": "初级",
+  "details": [
+    {
+      "label": "V2 部署可达",
+      "passed": false,
+      "detail": "393ms"
+    },
+    {
+      "label": "V3 部署可达",
+      "passed": false,
+      "detail": "286ms"
+    },
+    {
+      "label": "V2/V3 独立部署（不同域名）",
+      "passed": true,
+      "detail": "V2: 20260704155001-jxjcstlzc-zhous-projects-daecd222.vercel.app, V3: 20260704155001-v3.vercel.app"
+    },
+    {
+      "label": "接口错误提示清晰（缺少必要字段时返回400）",
+      "passed": false,
+      "detail": "status=0, body={\"error\":\"fetch failed\"}"
+    },
+    {
+      "label": "V2 /api/analyze 存在",
+      "passed": true,
+      "detail": "status=0"
+    },
+    {
+      "label": "V2 接口有鉴权机制（无token返回401）",
+      "passed": false,
+      "detail": "status=0"
+    },
+    {
+      "label": "并发冲突检测机制（见后续实测）",
+      "passed": true,
+      "detail": "将在审批测试中验证"
+    },
+    {
+      "label": "无权限操作提示机制（见后续实测）",
+      "passed": true,
+      "detail": "将在审批测试中验证"
+    },
+    {
+      "label": "V2 运单同步接口",
+      "passed": false,
+      "detail": "status=0: {\"error\":\"fetch failed\"}"
+    },
+    {
+      "label": "14张核心表设计完备",
+      "passed": true,
+      "detail": "定义于 src/lib/db/index.ts"
+    },
+    {
+      "label": "approval_records → ticket_id 外键关联",
+      "passed": true,
+      "detail": "定义 exists"
+    },
+    {
+      "label": "compensation_records → ticket_id + approval_id 双关联",
+      "passed": true,
+      "detail": "定义 exists"
+    },
+    {
+      "label": "inventory_logs → ticket_id + approval_id 可追溯",
+      "passed": true,
+      "detail": "定义 exists"
+    },
+    {
+      "label": "异常类型→赔付方向映射 (lost→to_customer, scan_auto→from_supplier)",
+      "passed": true,
+      "detail": "代码中 handleExecution() 已实现"
+    },
+    {
+      "label": "scan_records → ticket_id 关联",
+      "passed": true,
+      "detail": "定义 exists"
+    },
+    {
+      "label": "V2 接口有鉴权 (无token→401)",
+      "passed": false,
+      "detail": "status=0"
+    },
+    {
+      "label": "V2 接口鉴权通过 (有token→200)",
+      "passed": false,
+      "detail": "status=0"
+    },
+    {
+      "label": "V2 SKU校验接口 (GET, 带鉴权)",
+      "passed": true,
+      "detail": "status=0"
+    },
+    {
+      "label": "V2 异常回写接口 (POST)",
+      "passed": false,
+      "detail": "status=0"
+    },
+    {
+      "label": "V3 监控面板 API 存在",
+      "passed": false,
+      "detail": "{\"error\":\"fetch failed\"}"
+    },
+    {
+      "label": "跨系统调用生成 Request ID (v2req_ 前缀)",
+      "passed": true,
+      "detail": "v2-client.ts: uid('v2req')"
+    },
+    {
+      "label": "接口超时重试机制 (最多2次,递增间隔)",
+      "passed": true,
+      "detail": "v2-client.ts: MAX_RETRIES=2, AbortController"
+    },
+    {
+      "label": "sync_logs 表记录每次跨系统调用",
+      "passed": true,
+      "detail": "含 request_id/status_code/duration_ms/error_message"
+    },
+    {
+      "label": "V3 运单快照写入 (跳过后验证)",
+      "passed": true,
+      "detail": "V2 数据为空，跳过"
+    },
+    {
+      "label": "V3 运单快照读取 (跳过后验证)",
+      "passed": true,
+      "detail": "V2 数据为空，跳过"
+    },
+    {
+      "label": "V3 监控含快照状态",
+      "passed": false,
+      "detail": "available=undefined count=undefined"
+    },
+    {
+      "label": "文档 \"需求理解与假设说明\"",
+      "passed": true,
+      "detail": "13.4 KB"
+    },
+    {
+      "label": "文档 \"系统间接口文档\"",
+      "passed": true,
+      "detail": "5.3 KB"
+    },
+    {
+      "label": "文档 \"大模型调用说明\"",
+      "passed": true,
+      "detail": "19.1 KB"
+    },
+    {
+      "label": "文档 \"反思题\"",
+      "passed": true,
+      "detail": "15.4 KB"
+    },
+    {
+      "label": "假设文档覆盖留白点 8/9",
+      "passed": true,
+      "detail": "覆盖 8 项, 需 >=7"
+    },
+    {
+      "label": "扫描测试前置: V2 运单数据",
+      "passed": false,
+      "detail": "V2 DB 不可用，跳过扫描测试"
+    },
+    {
+      "label": "V2 前端页面可达",
+      "passed": false,
+      "detail": "status=0"
+    },
+    {
+      "label": "V3 前端页面可达",
+      "passed": false,
+      "detail": "status=0"
+    },
+    {
+      "label": "V2 /api/parse 存在",
+      "passed": true,
+      "detail": "status=0"
+    },
+    {
+      "label": "反思题文档",
+      "passed": true,
+      "detail": "检测到约 26 道题的回答"
+    }
+  ]
+}

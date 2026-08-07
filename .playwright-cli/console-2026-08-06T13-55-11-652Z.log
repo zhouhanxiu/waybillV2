@@ -1,0 +1,15 @@
+[   26458ms] [ERROR] Failed to load resource: the server responded with a status of 422 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[   93698ms] [ERROR] Failed to load resource: the server responded with a status of 422 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[  123265ms] [ERROR] Failed to load resource: the server responded with a status of 422 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[  185715ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://20260704155001.vercel.app/10000-orders.xlsx:0
+[  252780ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://20260704155001.vercel.app/10000-orders.xlsx:0
+[  324324ms] [ERROR] Failed to load resource: the server responded with a status of 422 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[  383616ms] [ERROR] Failed to load resource: the server responded with a status of 422 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[  456475ms] [ERROR] Failed to load resource: the server responded with a status of 422 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[  539282ms] [ERROR] Failed to load resource: the server responded with a status of 422 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[  653957ms] [ERROR] Failed to load resource: the server responded with a status of 422 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[  748263ms] [ERROR] Failed to load resource: the server responded with a status of 422 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[ 1055258ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[ 1184620ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[ 1479401ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://20260704155001.vercel.app/api/import-tasks:0
+[ 1593987ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_CLOSED @ https://20260704155001.vercel.app/api/import-tasks:0
