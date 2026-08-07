@@ -161,9 +161,8 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const traceId = `trace-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
-  // 4. 事务：只写 task + batches（占位空 payload）+ outbox，不写 payload 避免大 JSON 序列化阻塞
-  // 优化：只存 base64 payload 字符串，不保留 rows 数组引用，让 GC 能回收内存
-  const unitPayloads: Array<{ unitId: string; payloadB64: string }> = [];
+  // 4. 事务：写 task + batches（含 payload）+ outbox
+  // payload 在事务外已完成 JSON.stringify→base64，事务内只做 DB INSERT，不阻塞
   await withTx(async (tx: any) => {
     await tx.unsafe(
       `INSERT INTO import_tasks
@@ -176,18 +175,17 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
       const unitId = `${taskId}-u${i}`;
       const start = i * UNIT_ROW_LIMIT;
       const end = Math.min(start + UNIT_ROW_LIMIT, totalRows);
-      // 直接序列化切片，不保留切片引用
+      // 序列化切片（在事务外完成，不影响事务耗时）
       const unitRows = rows.slice(start, end);
       const payloadB64 = Buffer.from(JSON.stringify(unitRows), "utf-8").toString("base64");
-      unitPayloads.push({ unitId, payloadB64 });
       // 序列化后清除切片引用，帮助 GC
       unitRows.length = 0;
 
       await tx.unsafe(
         `INSERT INTO import_task_batches
           (id, task_id, unit_index, row_start, row_end, status, attempt, unit_payload, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,'pending',0,'',NOW(),NOW())`,
-        [unitId, taskId, i, start, end]
+         VALUES ($1,$2,$3,$4,$5,'pending',0,$6,NOW(),NOW())`,
+        [unitId, taskId, i, start, end, payloadB64]
       );
 
       await tx.unsafe(
@@ -202,47 +200,24 @@ export async function runImport(buffer: Buffer, fileName: string, fileType: stri
   // 释放 rows 数组，减少内存占用
   rows.length = 0;
 
-  // 5. 异步补写 payload，写完后 dispatch（fire-and-forget）
-  void (async () => {
-    // 5a. 写 payload
-    for (const u of unitPayloads) {
-      try {
-        await query(
-          `UPDATE import_task_batches SET unit_payload=$1, updated_at=NOW() WHERE id=$2`,
-          [u.payloadB64, u.unitId]
-        );
-      } catch (err: any) {
-        console.error(`[import-tasks] payload write failed ${u.unitId}:`, err?.message);
-      }
-    }
-    console.log(JSON.stringify({ stage: "import.payload_written", taskId, units: unitPayloads.length }));
-
-    // 5b. payload 写完后 dispatch + 性能日志
-    try {
-      const elapsed = Date.now() - t0;
-      await query(
-        `INSERT INTO batch_performance_log (task_id, unit_id, phase, rows_processed, duration_ms, throughput_rps)
-         VALUES ($1,$2,'parse_read',$3,$4,$5)`,
-        [taskId, `${taskId}#parse`, totalRows, elapsed, totalRows > 0 ? Math.round((totalRows / Math.max(elapsed, 1)) * 1000 * 100) / 100 : 0]
-      );
-      await query(
-        `INSERT INTO trace_events
-          (trace_id, task_id, service, span_name, level, message, started_at, "timestamp", duration_ms)
-         VALUES ($1,$2,'api-gateway','import.received','INFO',$3,NOW(),NOW(),$4)`,
-        [traceId, taskId, `接收导入：file=${fileName} rows=${totalRows} units=${totalUnits}`, elapsed]
-      );
-      try {
-        const { dispatchOnce } = await import("@/lib/queue/outbox");
-        await dispatchOnce();
-      } catch (err: any) {
-        console.error("[import-tasks] dispatch error", taskId, err?.message);
-      }
-    } catch (err: any) {
-      console.error(`[import-tasks] bg log failed for ${taskId}:`, err?.message);
-    }
-  })();
-
+  // 5. 写入性能日志和 trace event（事务外，不阻塞主流程但等待完成）
   const elapsed = Date.now() - t0;
+  try {
+    await query(
+      `INSERT INTO batch_performance_log (task_id, unit_id, phase, rows_processed, duration_ms, throughput_rps)
+       VALUES ($1,$2,'parse_read',$3,$4,$5)`,
+      [taskId, `${taskId}#parse`, totalRows, elapsed, totalRows > 0 ? Math.round((totalRows / Math.max(elapsed, 1)) * 1000 * 100) / 100 : 0]
+    );
+    await query(
+      `INSERT INTO trace_events
+        (trace_id, task_id, service, span_name, level, message, started_at, "timestamp", duration_ms)
+       VALUES ($1,$2,'api-gateway','import.received','INFO',$3,NOW(),NOW(),$4)`,
+      [traceId, taskId, `接收导入：file=${fileName} rows=${totalRows} units=${totalUnits}`, elapsed]
+    );
+  } catch (err: any) {
+    console.error("[import-tasks] trace/perf log error", err?.message || err);
+  }
+
   console.log(JSON.stringify({ stage: "import.accepted", taskId, acceptedInMs: elapsed, totalRows, totalUnits }));
 
   return NextResponse.json({
