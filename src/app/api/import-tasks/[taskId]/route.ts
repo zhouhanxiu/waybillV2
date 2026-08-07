@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb, query } from "@/lib/db";
 import { processUnit } from "@/lib/worker/processUnit";
 
-// 单 unit 同步处理的超时上限（毫秒）—— GET 不应阻塞太久，
-// 取小于 Vercel Hobby 默认 maxDuration（10s）以避免函数被强制截断
-const DRIVE_TIMEOUT_MS = parseInt(process.env.DRIVE_TIMEOUT_MS || "5000", 10);
+// Vercel Serverless 必须显式放宽 maxDuration：
+// 默认 5s 对 1000 行 unit 处理（SQL IN + 1000 行 INSERT + trace/perf 日志）不够。
+// 之前用 Promise.race(5s) 反而会让 processUnit 在 background 被冻结，
+// unit 卡在 processing 状态 60s 才能再次被接管，导致前端永远看不到进度。
+// 这里直接放行 60s，让 processUnit 同步跑完一个 unit 再返回。
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 // 任务详情 + 进度概览
 export async function GET(
@@ -69,13 +73,13 @@ export async function GET(
 
   // ── 驱动进度（Vercel Serverless 友好）────────────────────────────────
   // 解决"上传后 1 分钟还没处理"的根因：
-  // 1) 默认 QUEUE_BACKEND=memory 内存泵在 Serverless 无常驻进程 → 必死
-  // 2) WORKER_MODE=cron 需要配置；否则 Vercel Cron 是唯一兜底
-  // 3) Vercel Cron schedule 默认是"每天 0 点"且 Hobby 计划每分钟被拒
-  // 4) QStash / Redis 均未配置
-  // 5) Vercel Serverless 函数在响应返回后会立即冻结 background task，
+  // 1) QUEUE_BACKEND=memory 内存泵在 Serverless 无常驻进程 → 必死
+  // 2) Vercel Cron 是兜底，但即使 1 分钟一次也无立即触发能力
+  // 3) QStash / Redis 均未配置
+  // 4) Vercel Serverless 函数在响应返回后会立即冻结 background task，
   //    所以必须 inline 处理，不能 fire-and-forget。
-  // 因此：状态查询 GET 主动 inline 处理一个 pending unit（带 DRIVE_TIMEOUT_MS 超时），
+  // 因此：状态查询 GET 主动 inline 处理一个 pending unit
+  // （依赖路由 maxDuration=60 让 processUnit 同步跑完，详见下方函数注释）。
   // 配合前端每 1.5s 轮询，可在多次轮询内推进完所有 unit，
   // 既不依赖 Vercel Cron 频率，也不依赖外部队列服务。
   if (
@@ -113,9 +117,13 @@ export async function GET(
 }
 
 /**
- * 同步处理一个 pending unit（原子抢占 + processUnit），总时间不超过 DRIVE_TIMEOUT_MS。
- * - processUnit 内部已是幂等：repeat 调用同一 unitId 不会重复累计/落库。
- * - 超时不会破坏一致性：未完成的 unit 仍为 pending，下次轮询再来驱动。
+ * 同步处理一个 pending unit（原子抢占 + processUnit）。
+ * - 信任 processUnit 内部幂等：repeat 调用同一 unitId 不会重复累计/落库。
+ * - processUnit 内部已对空 payload / 校验失败 / upsert 失败走 markUnitFailed 路径，不会无限 throw。
+ * - 兜底 try-catch 防 processUnit 真抛异常时让 GET 返回 500 —— 仅记日志。
+ * - 不再用 Promise.race + DRIVE_TIMEOUT_MS（之前 5s race + Vercel 默认 5s maxDuration，
+ *   会让 processUnit 在背景被冻结，unit 卡在 processing 60s 才能被再次接管，循环卡死）。
+ *   现在依赖路由 maxDuration=60 让 processUnit 同步跑完。
  */
 async function driveOnePendingUnit(taskId: string): Promise<void> {
   // 先取出最早一个 pending unit（或卡死 processing，但 updated_at 超 60s）
@@ -135,29 +143,26 @@ async function driveOnePendingUnit(taskId: string): Promise<void> {
     return;
   }
   const unitId = pending[0].id;
-
   const startedAt = Date.now();
-  let result: any = null;
-  let error: any = null;
-  const work = processUnit(taskId, unitId)
-    .then((r) => { result = r; })
-    .catch((err: any) => { error = err?.message || String(err); });
-  const timeoutP = new Promise<void>((resolve) =>
-    setTimeout(resolve, DRIVE_TIMEOUT_MS)
-  );
-  await Promise.race([work, timeoutP]);
-  console.log(
-    JSON.stringify({
-      stage: "task-get.drive",
-      taskId,
-      unitId,
-      unitIndex: pending[0].unit_index,
-      durationMs: Date.now() - startedAt,
-      timedOut: work.then === undefined ? false : Date.now() - startedAt >= DRIVE_TIMEOUT_MS,
-      successRows: result?.successRows ?? null,
-      errorRows: result?.errorRows ?? null,
-      degraded: result?.degraded ?? null,
-      error,
-    })
-  );
+  try {
+    const result = await processUnit(taskId, unitId);
+    console.log(
+      JSON.stringify({
+        stage: "task-get.drive",
+        taskId,
+        unitId,
+        unitIndex: pending[0].unit_index,
+        durationMs: Date.now() - startedAt,
+        successRows: result?.successRows ?? null,
+        errorRows: result?.errorRows ?? null,
+        degraded: result?.degraded ?? null,
+      })
+    );
+  } catch (err: any) {
+    console.error(
+      "[task-get.drive] processUnit thrown",
+      JSON.stringify({ taskId, unitId, durationMs: Date.now() - startedAt, error: err?.message || String(err) })
+    );
+    // 不向上抛：让 GET 仍能返回当前进度，client 会继续轮询
+  }
 }
