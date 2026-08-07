@@ -1,18 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
-// Trace 检索：按 trace_id 精确查，或按 task_id 列出该任务全部 trace
+// Trace 检索：按 trace_id 精确查，或按 task_id 列出该任务全部 trace，支持分页
 export async function GET(req: NextRequest) {
   const db = getDb();
   const sp = req.nextUrl.searchParams;
   const traceId = sp.get("traceId");
   const taskId = sp.get("taskId");
   const errorCode = sp.get("error_code");
-  const limit = Math.min(200, Math.max(1, parseInt(sp.get("limit") || "100", 10)));
+  const page = Math.max(1, parseInt(sp.get("page") || "1", 10));
+  const pageSize = Math.min(200, Math.max(1, parseInt(sp.get("pageSize") || "20", 10)));
+  const offset = (page - 1) * pageSize;
 
   try {
     // 按错误码查询明细（监控看板"错误分布"点击跳入）
     if (errorCode) {
+      const countRow = await db.unsafe(
+        `SELECT COUNT(*)::int AS total FROM import_task_errors e WHERE e.error_code = $1`,
+        [errorCode]
+      );
+      const total = countRow[0]?.total || 0;
       const rows = await db.unsafe(
         `SELECT e.id, e.task_id, e.unit_id, e.row_index, e.error_code, e.error_message,
                 e.raw_data AS raw_row, e.masked_data, e.created_at, t.trace_id
@@ -20,8 +27,8 @@ export async function GET(req: NextRequest) {
          LEFT JOIN import_tasks t ON t.id = e.task_id
          WHERE e.error_code = $1
          ORDER BY e.created_at DESC
-         LIMIT $2`,
-        [errorCode, limit]
+         LIMIT $2 OFFSET $3`,
+        [errorCode, pageSize, offset]
       );
       const items = rows.map((r: any) => ({
         id: r.id,
@@ -34,7 +41,7 @@ export async function GET(req: NextRequest) {
         trace_id: r.trace_id,
         created_at: r.created_at,
       }));
-      return NextResponse.json({ error_code: errorCode, errors: items });
+      return NextResponse.json({ error_code: errorCode, errors: items, page, pageSize, total });
     }
 
     if (traceId) {
@@ -45,6 +52,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ trace_id: traceId, spans: rows });
     }
     if (taskId) {
+      const countRow = await db.unsafe(
+        `SELECT COUNT(DISTINCT trace_id)::int AS total
+         FROM trace_events WHERE task_id = $1`,
+        [taskId]
+      );
+      const total = countRow[0]?.total || 0;
       const rows = await db.unsafe(
         `SELECT trace_id, span_name, MIN("timestamp") AS start_ts, MAX("timestamp") AS end_ts,
                 COUNT(*)::int AS spans,
@@ -52,10 +65,10 @@ export async function GET(req: NextRequest) {
          FROM trace_events WHERE task_id = $1
          GROUP BY trace_id, span_name
          ORDER BY start_ts ASC
-         LIMIT $2`,
-        [taskId, limit]
+         LIMIT $2 OFFSET $3`,
+        [taskId, pageSize, offset]
       );
-      return NextResponse.json({ task_id: taskId, traces: rows });
+      return NextResponse.json({ task_id: taskId, traces: rows, page, pageSize, total });
     }
     return NextResponse.json({ error: "traceId or taskId required" }, { status: 400 });
   } catch (err: any) {
