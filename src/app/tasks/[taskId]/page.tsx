@@ -131,8 +131,8 @@ export default function TaskDetailPage() {
   return (
     <div className="max-w-5xl mx-auto p-6">
       {/* 顶部：任务ID + 状态 + 操作 */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
+      <div className="flex items-start justify-between mb-6 gap-4">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
             {statusBadge(status)}
             {task.degraded && (
@@ -141,10 +141,11 @@ export default function TaskDetailPage() {
           </div>
           <h1 className="text-xl font-bold text-ink">{task.filename || task.task_id || taskId}</h1>
           <div className="text-xs text-ink-soft mt-1 font-mono break-all">
-            {taskId}{task.trace_id && <span className="ml-3">trace: {task.trace_id}</span>}
+            <span className="block">{taskId}</span>
+            {task.trace_id && <span className="block mt-0.5">trace: {task.trace_id}</span>}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           <button onClick={fetchAll} className="px-3 py-1.5 rounded-lg border border-line text-sm text-ink-soft hover:bg-bg flex items-center gap-1">
             <RefreshCw className="w-3.5 h-3.5" /> 刷新
           </button>
